@@ -3,5 +3,6 @@
 
 #include "objectmodel.h"
 #include "classes.h"
+#include "lifecycle.h"
 
 #endif /* SLVM_DYNRUNTIME_H */

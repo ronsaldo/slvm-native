@@ -4,11 +4,14 @@ set(Spur_Sources
 
 set(Classes_Sources
     classes/collections.c
+    classes/context.c
+    classes/ffi.c
     classes/kernel.c
     classes/magnitude.c
 )
 
 set(All_Sources
+    lifecycle.c
     ${Spur_Sources}
     ${Classes_Sources}
 )

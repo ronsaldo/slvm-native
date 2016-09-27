@@ -20,6 +20,47 @@ typedef intptr_t SLVM_SOop;
 #define SLVM_SPUR_OBJECT_MODEL 1
 
 /**
+ * Object format
+ */
+enum ObjectFormat
+{
+	OF_EMPTY = 0,
+	OF_FIXED_SIZE = 1,
+	OF_VARIABLE_SIZE_NO_IVARS = 2,
+	OF_VARIABLE_SIZE_IVARS = 3,
+	OF_WEAK_VARIABLE_SIZE = 4,
+	OF_WEAK_FIXED_SIZE = 5,
+	OF_INDEXABLE_64 = 9,
+	OF_INDEXABLE_32 = 10,
+	OF_INDEXABLE_32_1,
+	OF_INDEXABLE_16 = 12,
+	OF_INDEXABLE_16_1,
+	OF_INDEXABLE_16_2,
+	OF_INDEXABLE_16_3,
+	OF_INDEXABLE_8 = 16,
+	OF_INDEXABLE_8_1,
+	OF_INDEXABLE_8_2,
+	OF_INDEXABLE_8_3,
+	OF_INDEXABLE_8_4,
+	OF_INDEXABLE_8_5,
+	OF_INDEXABLE_8_6,
+	OF_INDEXABLE_8_7,
+	OF_COMPILED_METHOD = 24,
+	OF_COMPILED_METHOD_1,
+	OF_COMPILED_METHOD_2,
+	OF_COMPILED_METHOD_3,
+	OF_COMPILED_METHOD_4,
+	OF_COMPILED_METHOD_5,
+	OF_COMPILED_METHOD_6,
+	OF_COMPILED_METHOD_7,
+
+	OF_INDEXABLE_NATIVE_FIRST = OF_INDEXABLE_64,
+};
+
+#define SLVM_SLOT_COUNT_OF_STRUCTURE(structure) \
+    ((sizeof(structure) - sizeof(SLVM_ObjectHeader) + sizeof(SLVM_Oop) - 1) / sizeof(SLVM_Oop))
+
+/**
  * The visible and fixed header of a dynamic object.
  **/
 typedef struct SLVM_ObjectHeader_
@@ -35,6 +76,25 @@ typedef struct SLVM_ObjectHeader_
 } SLVM_ObjectHeader;
 
 typedef struct SLVM_Behavior_ SLVM_Behavior;
+
+/**
+ * Macros for building the object header.
+ */
+#define SLVM_PINNED_OBJECT_EMPTY_HEADER(classIndexValue, identityHashValue) { \
+    .objectFormat = OF_EMPTY, \
+    .classIndex = classIndexValue, \
+    .identityHash = identityHashValue, \
+    .isPinned = 1, \
+    .slotCount = 0, \
+}
+
+#define SLVM_PINNED_OBJECT_FIXED_HEADER(slotCountValue, classIndexValue, identityHashValue) { \
+    .objectFormat = OF_FIXED_SIZE, \
+    .classIndex = classIndexValue, \
+    .identityHash = identityHashValue, \
+    .isPinned = 1, \
+    .slotCount = slotCountValue, \
+}
 
 /**
  * Macros for identifying immediates vs pointer objects.
@@ -86,13 +146,18 @@ typedef struct SLVM_Behavior_ SLVM_Behavior;
 #define slvm_oopIsSmallFloat(oop) (((oop) & SLVM_SPUR_SMALLFLOAT_TAG_MASK) == SLVM_SPUR_SMALLFLOAT_TAG_VALUE)
 #endif
 
+#define slvm_encodeSmallInteger(value) ((value << SLVM_SPUR_SMALLINTEGER_TAG_BITS) | SLVM_SPUR_SMALLINTEGER_TAG_VALUE)
+#define slvm_decodeSmallInteger(oop) (oop >> SLVM_SPUR_SMALLINTEGER_TAG_BITS)
+
 #define slvm_getClassIndexFromOop(oop) (slvm_oopIsPointers(oop) ? ((SLVM_ObjectHeader*)(oop))->classIndex : ((oop) & SLVM_SPUR_TAG_MASK))
 #define slvm_getClassFromOop(oop) slvm_classTable[slvm_getClassIndexFromOop(oop)]
 
+#define slvm_makeHashFromPointer(pointer) ((((SLVM_Oop) pointer) >> 4) & 0x3fffff)
 /**
  * A sparse class table
  **/
-extern SLVM_Behavior** slvm_classTable[1024];
+extern SLVM_Behavior** slvm_classTable[4096];
 extern void slvm_spur_initialize(void);
+extern void slvm_spur_shutdown(void);
 
 #endif /* SLVM_SPUR_OBJECT_MODEL_H */
