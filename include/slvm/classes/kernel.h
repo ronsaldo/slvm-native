@@ -1,6 +1,7 @@
 #ifndef SLVM_CLASSES_KERNEL_H
 #define SLVM_CLASSES_KERNEL_H
 
+#include <stddef.h>
 #include "../objectmodel.h"
 #include "compactIndices.h"
 
@@ -105,10 +106,16 @@ extern SLVM_True slvm_true;
 extern SLVM_False slvm_false;
 
 #define slvm_nilOop ((SLVM_Oop)&slvm_nil)
+#define slvm_isNil(object) ((SLVM_Oop)object == slvm_nilOop)
 
-#define slvm_behavior_encodeFormatAndFixedSize(format, fixedSlot) slvm_encodeSmallInteger(((format << 16) | fixedSlot))
-#define slvm_behavior_decodeFormat(formatAndSize) (slvm_decodeSmallInteger(formatAndSize) >> 16)
-#define slvm_behavior_decodeFixedSize(formatAndSize) (slvm_decodeSmallInteger(formatAndSize) & 0xFFFF)
+/**
+ * Behavior methods
+ */
+#define slvm_Behavior_encodeFormatAndFixedSize(format, fixedSlot) slvm_encodeSmallInteger(((format << 16) | fixedSlot))
+#define slvm_Behavior_decodeFormat(formatAndSize) (slvm_decodeSmallInteger(formatAndSize) >> 16)
+#define slvm_Behavior_decodeFixedSize(formatAndSize) (slvm_decodeSmallInteger(formatAndSize) & 0xFFFF)
+
+extern SLVM_ProtoObject *slvm_Behavior_basicNew(SLVM_Behavior *behavior, size_t variableSize);
 
 /**
  * Implementation of the kernel classes.
@@ -123,7 +130,7 @@ extern SLVM_False slvm_false;
                 /* Behavior */  \
                 .superclass = superClassValue, \
                 .methodDict = (SLVM_MethodDictionary*)&slvm_nil, \
-                .format = slvm_behavior_encodeFormatAndFixedSize(formatType, fixedSize), \
+                .format = slvm_Behavior_encodeFormatAndFixedSize(formatType, fixedSize), \
                 .layout = slvm_nilOop, \
             }, \
             /* Class Description*/  \
@@ -148,7 +155,7 @@ extern SLVM_False slvm_false;
                 /* Behavior */  \
                 .superclass = superMetaClassValue, \
                 .methodDict = (SLVM_MethodDictionary*)&slvm_nil, \
-                .format = slvm_behavior_encodeFormatAndFixedSize(OF_FIXED_SIZE, SLVM_SLOT_COUNT_OF_STRUCTURE(SLVM_Class)), \
+                .format = slvm_Behavior_encodeFormatAndFixedSize(OF_FIXED_SIZE, SLVM_SLOT_COUNT_OF_STRUCTURE(SLVM_Class)), \
                 .layout = slvm_nilOop, \
             }, \
             /* Class Description*/  \
@@ -170,5 +177,12 @@ SLVM_IMPLEMENT_KERNEL_CLASS_EXPLICIT_SUPER_METACLASS(className, \
 SLVM_IMPLEMENT_KERNEL_CLASS_EXPLICIT_FORMAT(className, superClassName, \
     (SLVM_SLOT_COUNT_OF_STRUCTURE(SLVM_ ## className) > 0 ? OF_FIXED_SIZE : OF_EMPTY), \
     SLVM_SLOT_COUNT_OF_STRUCTURE(SLVM_ ## className))
+
+
+#define SLVM_KCLASS(className) \
+    (&slvm_kernel_class_ ## className)
+
+#define SLVM_KNEW(className, extraSize) \
+    (SLVM_ ## className*) slvm_Behavior_basicNew((SLVM_Behavior*)SLVM_KCLASS(className), extraSize)
 
 #endif /* SLVM_CLASSES_KERNEL_H */

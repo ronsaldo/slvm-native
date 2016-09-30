@@ -2,6 +2,7 @@
 #define SLVM_SPUR_OBJECT_MODEL_H
 
 #include <stdint.h>
+#include <stddef.h>
 
 /**
  * A pointer into an object or an immediate value.
@@ -146,6 +147,8 @@ typedef struct SLVM_Behavior_ SLVM_Behavior;
 #define slvm_oopIsSmallFloat(oop) (((oop) & SLVM_SPUR_SMALLFLOAT_TAG_MASK) == SLVM_SPUR_SMALLFLOAT_TAG_VALUE)
 #endif
 
+#define slvm_encodeSmallIntegerOffset(value) (value << SLVM_SPUR_SMALLINTEGER_TAG_BITS)
+
 #define slvm_encodeSmallInteger(value) ((value << SLVM_SPUR_SMALLINTEGER_TAG_BITS) | SLVM_SPUR_SMALLINTEGER_TAG_VALUE)
 #define slvm_decodeSmallInteger(oop) (oop >> SLVM_SPUR_SMALLINTEGER_TAG_BITS)
 
@@ -159,5 +162,7 @@ typedef struct SLVM_Behavior_ SLVM_Behavior;
 extern SLVM_Behavior** slvm_classTable[4096];
 extern void slvm_spur_initialize(void);
 extern void slvm_spur_shutdown(void);
+
+extern size_t slvm_basicSize(SLVM_Oop object);
 
 #endif /* SLVM_SPUR_OBJECT_MODEL_H */

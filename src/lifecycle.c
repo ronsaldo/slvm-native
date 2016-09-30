@@ -1,5 +1,8 @@
 #include "slvm/dynrun.h"
 
+extern void slvm_internal_init_collections(void);
+extern void slvm_internal_init_classes(void);
+
 void slvm_dynrun_initialize(void)
 {
 #ifdef SLVM_SPUR_OBJECT_MODEL
@@ -7,6 +10,9 @@ void slvm_dynrun_initialize(void)
 #else
 #error TODO: implement myself
 #endif
+
+    slvm_internal_init_collections();
+    slvm_internal_init_classes();
 }
 
 void slvm_dynrun_shutdown(void)
