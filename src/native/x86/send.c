@@ -80,13 +80,19 @@ void slvm_dynrun_send(void *stackPointer)
         }
         else if(methodClass == SLVM_KCI_PrimitiveMethod)
         {
-            primitiveMethod = (SLVM_PrimitiveMethod*)method;
-            result = primitiveMethod->entryPoint(
-                requiredArguments->selector, requiredArguments->receiver,
-                requiredArguments->oopArgumentCount, requiredArguments->oopArguments,
-                requiredArguments->nativeArgumentSize, &requiredArguments->oopArguments[requiredArguments->oopArgumentCount]
-            );
+            /* Create the primitive context */
+            PrimitiveContext context = {
+                .stackPointer = stackPointer,
+                .selector = requiredArguments->selector, .receiver = requiredArguments->receiver,
+                .oopArgumentCount = requiredArguments->oopArgumentCount, .oopArguments = requiredArguments->oopArguments,
+                .nativeArgumentSize = requiredArguments->nativeArgumentSize, .nativeArguments = &requiredArguments->oopArguments[requiredArguments->oopArgumentCount]
+            };
 
+            /* Call the primitive. */
+            primitiveMethod = (SLVM_PrimitiveMethod*)method;
+            result = primitiveMethod->entryPoint(&context);
+
+            /* Return through the trampoline. */
             return slvm_dynrun_returnToSend(stackPointer, (void*)result);
         }
         else

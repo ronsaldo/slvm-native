@@ -13,9 +13,20 @@ typedef SLVM_Object SLVM_BlockClosure;
 typedef SLVM_Object SLVM_Mutex;
 typedef SLVM_Object SLVM_Semaphore;
 
-typedef SLVM_Oop (*SLVM_PrimitiveFunction) (SLVM_Oop selector, SLVM_Oop receiver,
-    size_t oopArgumentCount, SLVM_Oop *oopArguments,
-    size_t nativeArgumentSize, void *nativeArguments);
+typedef struct PrimitiveContext_
+{
+    void *stackPointer;
+    SLVM_Oop selector;
+    SLVM_Oop receiver;
+
+    size_t oopArgumentCount;
+    SLVM_Oop *oopArguments;
+
+    size_t nativeArgumentSize;
+    void *nativeArguments;
+} PrimitiveContext;
+
+typedef SLVM_Oop (*SLVM_PrimitiveFunction) (PrimitiveContext *context);
 
 struct SLVM_CompiledMethod_
 {

@@ -21,12 +21,10 @@ SLVM_IMPLEMENT_KERNEL_CLASS(Point, Object);
 /**
  * SmallInteger primitives
  */
-SLVM_Oop slvm_SmallInteger_primitive_asString(SLVM_Oop selector, SLVM_Oop receiver,
-     size_t oopArgumentCount, SLVM_Oop *oopArguments,
-     size_t nativeArgumentSize, void *nativeArguments)
+SLVM_Oop slvm_SmallInteger_primitive_asString(PrimitiveContext *context)
 {
     char buffer[128];
-    sprintf(buffer, "%lld", (long long)slvm_decodeSmallInteger(receiver));
+    sprintf(buffer, "%lld", (long long)slvm_decodeSmallInteger(context->receiver));
     return (SLVM_Oop)slvm_String_convertCString(buffer);
 }
 
