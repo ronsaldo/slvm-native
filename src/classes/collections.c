@@ -3,11 +3,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "slvm/classes/collections.h"
+#include "slvm/memory.h"
 
 SLVM_IMPLEMENT_KERNEL_CLASS(Collection, Object);
     SLVM_IMPLEMENT_KERNEL_CLASS(HashedCollection, Collection);
         SLVM_IMPLEMENT_KERNEL_CLASS(Dictionary, HashedCollection);
             SLVM_IMPLEMENT_KERNEL_CLASS(IdentityDictionary, Dictionary);
+                SLVM_IMPLEMENT_KERNEL_CLASS(SystemDictionary, IdentityDictionary);
             SLVM_IMPLEMENT_KERNEL_CLASS(MethodDictionary, Dictionary);
         SLVM_IMPLEMENT_KERNEL_CLASS(Set, HashedCollection);
             SLVM_IMPLEMENT_KERNEL_CLASS(IdentitySet, HashedCollection);
@@ -197,6 +199,32 @@ uint32_t slvm_WideString_hash(SLVM_WideString *object, uint32_t initialHash)
     return hash;
 }
 
+void slvm_String_print(SLVM_String *object)
+{
+    unsigned int classIndex;
+    assert(!slvm_isNil(object));
+
+    classIndex = object->_header_.classIndex;
+    if(classIndex == SLVM_KCI_ByteString || classIndex == SLVM_KCI_ByteSymbol)
+    {
+        return slvm_ByteString_print((SLVM_ByteString*)object);
+    }
+    else if(classIndex == SLVM_KCI_WideString || classIndex == SLVM_KCI_WideSymbol)
+    {
+        return slvm_WideString_print((SLVM_WideString*)object);
+    }
+}
+
+void slvm_ByteString_print(SLVM_ByteString *object)
+{
+    (void)fwrite(object->data, slvm_basicSize((SLVM_Oop)object), 1, stdout);
+}
+
+void slvm_WideString_print(SLVM_WideString *object)
+{
+    /* TODO: implement myself when it is possible. */
+}
+
 /**
  * Symbol
  */
@@ -265,7 +293,281 @@ SLVM_Symbol *slvm_Symbol_internCString(const char *cstring)
 }
 
 /**
- * WeakSets
+ * HashedCollection
+ */
+ static int slvm_HashedCollection_fullCondition(SLVM_HashedCollection *collection)
+ {
+     size_t arraySize = slvm_basicSize((SLVM_Oop)collection->array);
+     return arraySize < 4 || arraySize - slvm_decodeSmallInteger(collection->tally) < arraySize / 4;
+ }
+
+/**
+ * Dictionary
+ */
+SLVM_Dictionary *slvm_Dictionary_new(SLVM_Class *clazz)
+{
+    return slvm_Dictionary_newWithCapacity(clazz, 5);
+}
+
+SLVM_Dictionary *slvm_Dictionary_newWithCapacity(SLVM_Class *clazz, size_t n)
+{
+    SLVM_Dictionary *result = (SLVM_Dictionary*)slvm_Behavior_basicNew((SLVM_Behavior*)clazz, 0);
+    result->array = SLVM_KNEW(Array, n);
+    result->tally = slvm_encodeSmallInteger(0);
+    return result;
+}
+
+SLVM_SystemDictionary *slvm_SystemDictionary_new()
+{
+    SLVM_SystemDictionary *result = (SLVM_SystemDictionary*)slvm_Dictionary_new(SLVM_KCLASS(SystemDictionary));
+    return result;
+}
+
+/**
+ * Identity dictionary
+ */
+intptr_t slvm_IdentityDictionary_scanFor(SLVM_IdentityDictionary *dictionary, SLVM_Oop key)
+{
+    SLVM_Association *element;
+    size_t arraySize;
+    size_t start;
+    size_t index;
+
+    arraySize = slvm_basicSize((SLVM_Oop)dictionary->array);
+    if(arraySize == 0)
+        return -1;
+
+    start = slvm_identityHash(key) % arraySize;
+    index = start;
+    SLVM_Array *array = dictionary->array;
+    do
+    {
+        element = (SLVM_Association*)array->data[index];
+        if(slvm_isNil(element) || element->_base_.key == key)
+            return index;
+
+        index = (index + 1) % arraySize;
+    } while(index != start);
+
+    return -1;
+}
+
+void slvm_IdentityDictionary_grow(SLVM_IdentityDictionary *dictionary)
+{
+    size_t i;
+    size_t arraySize;
+    size_t newArraySize;
+    SLVM_Array *oldArray;
+    SLVM_Association *element;
+
+    /* Duplicate the dictionary capacity. */
+    arraySize = slvm_basicSize((SLVM_Oop)dictionary->array);
+    newArraySize = arraySize * 2;
+    if(newArraySize < 4)
+        newArraySize = 4;
+
+    /* Allocate the new array. */
+    oldArray = dictionary->array;
+    dictionary->tally = slvm_encodeSmallInteger(0);
+    dictionary->array = SLVM_KNEW(Array, newArraySize);
+
+    /* Reinsert the elements into the set. */
+    for(i = 0; i < arraySize; ++i)
+    {
+        element = (SLVM_Association*)oldArray->data[i];
+        if(!slvm_isNil(element))
+            slvm_IdentityDictionary_addAssociation(dictionary, element);
+    }
+}
+
+SLVM_Association *slvm_IdentityDictionary_associationAt(SLVM_IdentityDictionary *dictionary, SLVM_Oop key)
+{
+    intptr_t index;
+
+    assert(!slvm_isNil(dictionary));
+
+    /* Scan the element. */
+    index  = slvm_IdentityDictionary_scanFor(dictionary, key);
+    assert(index >= 0);
+
+    /* Return the value of the element. */
+    return (SLVM_Association *)dictionary->array->data[index];
+}
+
+void slvm_IdentityDictionary_addAssociation(SLVM_IdentityDictionary *dictionary, SLVM_Association *association)
+{
+    SLVM_Array *array;
+    intptr_t index;
+
+    assert(!slvm_isNil(dictionary));
+    assert(!slvm_isNil(association));
+
+    /* Scan the element */
+    index = slvm_IdentityDictionary_scanFor(dictionary, association->_base_.key);
+    assert(index >= 0);
+
+    /* Put the element at its position. */
+    array = dictionary->array;
+    if((SLVM_Association*)array->data[index] == association)
+    {
+        array->data[index] = (SLVM_Oop)association;
+    }
+    else
+    {
+        array->data[index] = (SLVM_Oop)association;
+
+        /* Increase the dictionary size. */
+        dictionary->tally += slvm_encodeSmallIntegerOffset(1);
+        if(slvm_HashedCollection_fullCondition((SLVM_HashedCollection*)dictionary))
+            slvm_IdentityDictionary_grow(dictionary);
+    }
+}
+
+void slvm_IdentityDictionary_atPut(SLVM_IdentityDictionary *dictionary, SLVM_Oop key, SLVM_Oop value)
+{
+    SLVM_Array *array;
+    SLVM_Association *element;
+    intptr_t index;
+
+    assert(!slvm_isNil(dictionary));
+
+    /* Scan the element */
+    index = slvm_IdentityDictionary_scanFor(dictionary, key);
+    assert(index >= 0);
+
+    /* Put the element at its position. */
+    array = dictionary->array;
+    element = (SLVM_Association*)array->data[index];
+    if(slvm_isNil(element))
+    {
+        array->data[index] = (SLVM_Oop)slvm_Association_make(key, value);
+
+        /* Increase the dictionary size. */
+        dictionary->tally += slvm_encodeSmallIntegerOffset(1);
+        if(slvm_HashedCollection_fullCondition((SLVM_HashedCollection*)dictionary))
+            slvm_IdentityDictionary_grow(dictionary);
+    }
+    else
+    {
+        element->value = value;
+    }
+}
+
+/**
+ * MethodDictionary
+ */
+SLVM_MethodDictionary *slvm_MethodDictionary_new()
+{
+    return slvm_MethodDictionary_newWithCapacity(5);
+}
+
+SLVM_MethodDictionary *slvm_MethodDictionary_newWithCapacity(size_t n)
+{
+    SLVM_MethodDictionary *result = (SLVM_MethodDictionary*)slvm_Dictionary_newWithCapacity(SLVM_KCLASS(MethodDictionary), n);
+    result->keys = SLVM_KNEW(Array, n);
+    return result;
+}
+
+intptr_t slvm_MethodDictionary_scanFor(SLVM_MethodDictionary *dictionary, SLVM_Oop key)
+{
+    SLVM_Oop element;
+    size_t arraySize;
+    size_t start;
+    size_t index;
+
+    arraySize = slvm_basicSize((SLVM_Oop)dictionary->keys);
+    if(arraySize == 0)
+        return -1;
+
+    start = slvm_identityHash(key) % arraySize;
+    index = start;
+    SLVM_Array *array = dictionary->keys;
+    do
+    {
+        element = array->data[index];
+        if(slvm_isNil(element) || element == key)
+            return index;
+
+        index = (index + 1) % arraySize;
+    } while(index != start);
+
+    return -1;
+}
+
+void slvm_MethodDictionary_grow(SLVM_MethodDictionary *dictionary)
+{
+    size_t i;
+    size_t arraySize;
+    size_t newArraySize;
+    SLVM_Array *oldValues;
+    SLVM_Array *oldKeys;
+    SLVM_Oop element;
+
+    /* Duplicate the dictionary capacity. */
+    arraySize = slvm_basicSize((SLVM_Oop)dictionary->keys);
+    newArraySize = arraySize * 2;
+    if(newArraySize < 4)
+        newArraySize = 4;
+
+    /* Allocate the new array. */
+    oldValues = dictionary->_base_.array;
+    oldKeys = dictionary->keys;
+    dictionary->_base_.tally = slvm_encodeSmallInteger(0);
+    dictionary->_base_.array = SLVM_KNEW(Array, newArraySize);
+    dictionary->keys = SLVM_KNEW(Array, newArraySize);
+
+    /* Reinsert the elements into the set. */
+    for(i = 0; i < arraySize; ++i)
+    {
+        element = oldKeys->data[i];
+        if(!slvm_isNil(element))
+            slvm_MethodDictionary_atPut(dictionary, element, oldValues->data[i]);
+    }
+}
+
+void slvm_MethodDictionary_atPut(SLVM_MethodDictionary *dictionary, SLVM_Oop key, SLVM_Oop value)
+{
+    intptr_t index;
+
+    assert(!slvm_isNil(dictionary));
+    index = slvm_MethodDictionary_scanFor(dictionary, key);
+    if(index < 0)
+    {
+        slvm_MethodDictionary_grow(dictionary);
+        return slvm_MethodDictionary_atPut(dictionary, key, value);
+    }
+
+    if(slvm_isNil(dictionary->keys))
+    {
+        dictionary->keys->data[index] = key;
+        dictionary->_base_.array->data[index] = value;
+
+        /* Increase the dictionary size. */
+        dictionary->_base_.tally += slvm_encodeSmallIntegerOffset(1);
+        if(slvm_HashedCollection_fullCondition((SLVM_HashedCollection*)dictionary))
+            slvm_MethodDictionary_grow(dictionary);
+    }
+    else
+    {
+        dictionary->_base_.array->data[index] = value;
+    }
+
+}
+
+SLVM_Oop slvm_MethodDictionary_atOrNil(SLVM_MethodDictionary *dictionary, SLVM_Oop key)
+{
+    intptr_t index;
+
+    assert(!slvm_isNil(dictionary));
+    index = slvm_MethodDictionary_scanFor(dictionary, key);
+    if(index < 0)
+        return slvm_nilOop;
+
+    return dictionary->_base_.array->data[index];
+}
+
+/**
+ * WeakSet
  */
 static SLVM_Array *slvm_WeakSet_newStorage(SLVM_WeakSet *set, size_t storageSize)
 {
@@ -290,9 +592,16 @@ intptr_t slvm_WeakSet_scanFor(SLVM_WeakSet *set, SLVM_Oop object, SLVM_HashFunct
 {
     SLVM_Oop element;
     SLVM_Oop flag;
-    size_t arraySize = slvm_basicSize((SLVM_Oop)set->_base_.array);
-    size_t start = hashFunction(object) % arraySize;
-    size_t index = start;
+    size_t arraySize;
+    size_t start;
+    size_t index;
+
+    arraySize = slvm_basicSize((SLVM_Oop)set->_base_.array);
+    if(arraySize == 0)
+        return -1;
+
+    start = hashFunction(object) % arraySize;
+    index = start;
     SLVM_Array *array = set->_base_.array;
     flag = set->flag;
     do
@@ -325,6 +634,10 @@ static void slvm_WeakSet_doAdd(SLVM_WeakSet *set, SLVM_Oop object, SLVM_HashFunc
     intptr_t index = slvm_WeakSet_scanFor(set, object, hashFunction, equalsFunction);
     assert(index >= 0);
 
+    /* Do not increase the size if the element was already in the set. */
+    if(set->_base_.array->data[index] == object)
+        return;
+
     set->_base_.array->data[index] = object;
     set->_base_.tally += slvm_encodeSmallIntegerOffset(1);
 }
@@ -352,12 +665,6 @@ static void slvm_WeakSet_doGrow(SLVM_WeakSet *set, SLVM_HashFunction hashFunctio
     }
 }
 
-int slvm_WeakSet_fullCondition(SLVM_WeakSet *set)
-{
-    size_t arraySize = slvm_basicSize((SLVM_Oop)set->_base_.array);
-    return arraySize < 4 || arraySize - slvm_decodeSmallInteger(set->_base_.tally) < arraySize / 4;
-}
-
 void slvm_WeakSet_grow(SLVM_WeakSet *set, SLVM_HashFunction hashFunction, SLVM_EqualsFunction equalsFunction)
 {
     size_t arraySize;
@@ -367,7 +674,7 @@ void slvm_WeakSet_grow(SLVM_WeakSet *set, SLVM_HashFunction hashFunction, SLVM_E
        element that was added by the GC. */
     arraySize = slvm_basicSize((SLVM_Oop)set->_base_.array);
     slvm_WeakSet_doGrow(set, hashFunction, equalsFunction, arraySize);
-    if(!slvm_WeakSet_fullCondition(set))
+    if(!slvm_HashedCollection_fullCondition((SLVM_HashedCollection*)set))
         return;
 
     /* Try to duplicate the set. */
@@ -382,17 +689,26 @@ void slvm_WeakSet_add(SLVM_WeakSet *set, SLVM_Oop object, SLVM_HashFunction hash
 {
     slvm_WeakSet_doAdd(set, object, hashFunction, equalsFunction);
 
-    if(slvm_WeakSet_fullCondition(set))
+    if(slvm_HashedCollection_fullCondition((SLVM_HashedCollection*)set))
         slvm_WeakSet_grow(set, hashFunction, equalsFunction);
 }
 
 /**
  * Collections initialization.
  */
-void slvm_internal_init_collections()
+void slvm_internal_init_collections_kernel(void)
 {
     /* Create the sets that are used for symbol internation. Symbols are used
      as selectors. */
     collectionRoots.newSymbols = (SLVM_WeakSet*)slvm_WeakSet_new(128);
     collectionRoots.symbolTable = (SLVM_WeakSet*)slvm_WeakSet_new(16);
+
+    slvm_dynrun_registerArrayOfRoots((SLVM_Oop*)&collectionRoots, sizeof(collectionRoots) / sizeof(SLVM_Oop));
+}
+
+void slvm_internal_init_collections(void)
+{
+    /* Symbol class variables. */
+    SLVM_KCLASS_VARIABLE_SET(Symbol, NewSymbols, collectionRoots.newSymbols);
+    SLVM_KCLASS_VARIABLE_SET(Symbol, SymbolTable, collectionRoots.symbolTable);
 }

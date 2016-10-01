@@ -8,6 +8,7 @@ typedef SLVM_Object SLVM_Collection;
     typedef struct SLVM_HashedCollection_ SLVM_HashedCollection;
         typedef SLVM_HashedCollection SLVM_Dictionary;
             typedef SLVM_Dictionary SLVM_IdentityDictionary;
+                typedef struct SLVM_SystemDictionary_ SLVM_SystemDictionary;
             typedef struct SLVM_MethodDictionary_ SLVM_MethodDictionary;
         typedef SLVM_HashedCollection SLVM_Set;
             typedef SLVM_Set SLVM_IdentitySet;
@@ -32,6 +33,12 @@ struct SLVM_HashedCollection_
     SLVM_Array* array;
 };
 
+struct SLVM_SystemDictionary_
+{
+    SLVM_OrderedCollection *cachedClassNames;
+    SLVM_OrderedCollection *cachedNonClassNames;
+};
+
 struct SLVM_WeakSet_
 {
     SLVM_HashedCollection _base_;
@@ -41,7 +48,7 @@ struct SLVM_WeakSet_
 struct SLVM_MethodDictionary_
 {
     SLVM_Dictionary _base_;
-    SLVM_Oop keys[];
+    SLVM_Array *keys;
 };
 
 struct SLVM_OrderedCollection_
@@ -98,6 +105,7 @@ SLVM_DECLARE_KERNEL_CLASS(Collection);
             SLVM_DECLARE_KERNEL_CLASS(WeakSet);
         SLVM_DECLARE_KERNEL_CLASS(Dictionary);
             SLVM_DECLARE_KERNEL_CLASS(IdentityDictionary);
+                SLVM_DECLARE_KERNEL_CLASS(SystemDictionary);
             SLVM_DECLARE_KERNEL_CLASS(MethodDictionary);
     SLVM_DECLARE_KERNEL_CLASS(SequenceableCollection);
         SLVM_DECLARE_KERNEL_CLASS(ArrayedCollection);
@@ -136,6 +144,23 @@ SLVM_Oop slvm_WeakSet_find(SLVM_WeakSet *set, SLVM_Oop object, SLVM_HashFunction
 void slvm_WeakSet_add(SLVM_WeakSet *set, SLVM_Oop object, SLVM_HashFunction hashFunction, SLVM_EqualsFunction equalsFunction);
 
 /**
+ * Dictionary
+ */
+SLVM_Dictionary *slvm_Dictionary_new(SLVM_Class *clazz);
+SLVM_Dictionary *slvm_Dictionary_newWithCapacity(SLVM_Class *clazz, size_t n);
+
+SLVM_MethodDictionary *slvm_MethodDictionary_new();
+SLVM_MethodDictionary *slvm_MethodDictionary_newWithCapacity(size_t n);
+void slvm_MethodDictionary_atPut(SLVM_MethodDictionary *dictionary, SLVM_Oop key, SLVM_Oop value);
+SLVM_Oop slvm_MethodDictionary_atOrNil(SLVM_MethodDictionary *dictionary, SLVM_Oop key);
+
+SLVM_Association *slvm_IdentityDictionary_associationAt(SLVM_IdentityDictionary *dictionary, SLVM_Oop key);
+void slvm_IdentityDictionary_addAssociation(SLVM_IdentityDictionary *dictionary, SLVM_Association *association);
+void slvm_IdentityDictionary_atPut(SLVM_IdentityDictionary *dictionary, SLVM_Oop key, SLVM_Oop value);
+
+SLVM_SystemDictionary *slvm_SystemDictionary_new();
+
+/**
  * Symbols and string
  */
 uint32_t slvm_ByteArrayData_stringHash(const uint8_t *data, size_t size, uint32_t initialHash);
@@ -153,5 +178,9 @@ SLVM_ByteString *slvm_String_convertCString(const char *string);
 
 SLVM_Symbol *slvm_Symbol_internString(SLVM_String *string);
 SLVM_Symbol *slvm_Symbol_internCString(const char *cstring);
+
+void slvm_String_print(SLVM_String *object);
+void slvm_ByteString_print(SLVM_ByteString *object);
+void slvm_WideString_print(SLVM_WideString *object);
 
 #endif /* SLVM_CLASSES_COLLECTIONS_H */

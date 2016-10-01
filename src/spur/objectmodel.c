@@ -251,4 +251,23 @@ SLVM_ProtoObject *slvm_Behavior_basicNew(SLVM_Behavior *behavior, size_t variabl
     return result;
 }
 
+/**
+ * Regstration of array of roots
+ */
+void slvm_dynrun_registerArrayOfRoots(SLVM_Oop *array, size_t numberOfElements)
+{
+}
+
+void slvm_dynrun_unregisterArrayOfRoots(SLVM_Oop *array, size_t numberOfElements)
+{
+}
+
+void slvm_dynrun_registerStaticHeap(void *start, size_t size)
+{
+}
+
+void slvm_dynrun_unregisterStaticHeap(void *start, size_t size)
+{
+}
+
 #endif /* SLVM_SPUR_OBJECT_MODEL */

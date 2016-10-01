@@ -96,4 +96,10 @@ SLVM_DECLARE_KERNEL_CLASS(Magnitude);
         SLVM_DECLARE_KERNEL_CLASS(Association);
 SLVM_DECLARE_KERNEL_CLASS(Point);
 
+/**
+ * Association
+ */
+SLVM_Association *slvm_Association_new();
+SLVM_Association *slvm_Association_make(SLVM_Oop key, SLVM_Oop value);
+
 #endif /* SLVM_CLASSES_MAGNITUDE_H */

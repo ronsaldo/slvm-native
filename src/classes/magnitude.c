@@ -1,4 +1,4 @@
-#include "slvm/classes/magnitude.h"
+#include "slvm/classes.h"
 
 SLVM_IMPLEMENT_KERNEL_CLASS(Magnitude, Object);
     SLVM_IMPLEMENT_KERNEL_CLASS(Character, Magnitude);
@@ -16,3 +16,19 @@ SLVM_IMPLEMENT_KERNEL_CLASS(Magnitude, Object);
         SLVM_IMPLEMENT_KERNEL_CLASS(Association, LookupKey);
 
 SLVM_IMPLEMENT_KERNEL_CLASS(Point, Object);
+
+/**
+ * Association
+ */
+SLVM_Association *slvm_Association_new()
+{
+    return SLVM_KNEW(Association, 0);
+}
+
+SLVM_Association *slvm_Association_make(SLVM_Oop key, SLVM_Oop value)
+{
+    SLVM_Association *result = slvm_Association_new();
+    result->_base_.key = key;
+    result->value = value;
+    return result;
+}
