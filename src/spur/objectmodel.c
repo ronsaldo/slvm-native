@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <malloc.h>
 #include <string.h>
+#include <stdlib.h>
 #include "slvm/objectmodel.h"
 #include "slvm/memory.h"
 #include "slvm/classes.h"
@@ -13,6 +14,7 @@ static unsigned int slvm_classTableBaseSize = 0;
 static unsigned int slvm_classTableSize = 0;
 
 static SLVM_LinkedList staticHeaps;
+static SLVM_StackHeapInformation compactingHeap;
 
 typedef void (*SLVM_SpurHeapIterator) (SLVM_HeapInformation *heapInformation, SLVM_Oop *forwardingPointer, SLVM_ObjectHeader *objectHeader, size_t slotCount);
 
@@ -77,8 +79,33 @@ SLVM_Behavior** slvm_classTable[4096];
 /* The first page is special. It contains only "known" class indices. */
 static SLVM_Behavior* slvm_classTableFirstPage[1024];
 
+static void slvm_spur_create_compactingHeap(void)
+{
+    /* Create the compacting heap. */
+    int result = slvm_StackHeap_create(&compactingHeap, SLVM_SPUR_DEFAULT_COMPACTING_HEAP_CAPACITY, SMPF_Readable | SMPF_Writeable);
+    if(result != 0)
+    {
+        fprintf(stderr, "Failed to create the compacting heap\n");
+        abort();
+    }
+
+    /* Mark the compacting heap as initialized. */
+    compactingHeap.base.flags = SHF_Initialized;
+
+    /* Register the compacting heap. */
+    slvm_list_addNode(&staticHeaps, (SLVM_LinkedListNode*)&compactingHeap);
+}
+
+static void slvm_spur_create_heaps(void)
+{
+    slvm_spur_create_compactingHeap();
+}
+
 void slvm_spur_initialize(void)
 {
+    /* Create the spur heaps. */
+    slvm_spur_create_heaps();
+
     /* Initialize the first page with nil*/
     int i;
     for(i = 0; i < 1024; ++i)
@@ -105,16 +132,6 @@ void slvm_spur_shutdown(void)
 {
 }
 
-/**
- * Create a proper dynamic heap with garbage collection.
- */
-static void *badMalloc(size_t size)
-{
-    uintptr_t result = (uintptr_t)malloc(size + 16);
-    result = (result + 15) & -16;
-    return (void*)result;
-}
-
 static SLVM_ObjectHeader *slvm_spur_instantiate_object(unsigned int format, size_t slotCount)
 {
     size_t totalSize;
@@ -133,7 +150,7 @@ static SLVM_ObjectHeader *slvm_spur_instantiate_object(unsigned int format, size
     totalSize = preheaderSize + sizeof(SLVM_ObjectHeader) + slotCount * sizeof(SLVM_Oop);
 
     /* Allocate the object itself. */
-    rawResult = (uint8_t*)badMalloc(totalSize);
+    rawResult = (uint8_t*)slvm_StackHeap_allocate(&compactingHeap, 16, totalSize);
     rawResult64 = (uint64_t*)rawResult;
 
     /* Set the object pre-header */

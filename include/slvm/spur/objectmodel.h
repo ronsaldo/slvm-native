@@ -20,6 +20,12 @@ typedef intptr_t SLVM_SOop;
 
 #define SLVM_SPUR_OBJECT_MODEL 1
 
+#if SLVM_SPUR_32
+#define SLVM_SPUR_DEFAULT_COMPACTING_HEAP_CAPACITY (512 << 20) /* 512 MB */
+#else
+#define SLVM_SPUR_DEFAULT_COMPACTING_HEAP_CAPACITY (((size_t)10) << ((size_t)30)) /* 10 GB */
+#endif
+
 /**
  * Object format
  */

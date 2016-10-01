@@ -20,6 +20,8 @@ endif()
 set(All_Sources
     lifecycle.c
     datastructures.c
+    memory_unix.c
+    memory.c
     ${Spur_Sources}
     ${Classes_Sources}
     ${Native_Sources}
