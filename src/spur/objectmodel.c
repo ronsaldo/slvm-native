@@ -2,11 +2,72 @@
 #include <malloc.h>
 #include <string.h>
 #include "slvm/objectmodel.h"
+#include "slvm/memory.h"
 #include "slvm/classes.h"
+#include "slvm/lifecycle.h"
 
 #ifdef SLVM_SPUR_OBJECT_MODEL
+#define FORWARDING_POINTER_TAG_MASK 7
+
 static unsigned int slvm_classTableBaseSize = 0;
 static unsigned int slvm_classTableSize = 0;
+
+static SLVM_LinkedList staticHeaps;
+
+typedef void (*SLVM_SpurHeapIterator) (SLVM_HeapInformation *heapInformation, SLVM_Oop *forwardingPointer, SLVM_ObjectHeader *objectHeader, size_t slotCount);
+
+static void slvm_spur_heap_iterate(SLVM_HeapInformation *heapInformation, SLVM_SpurHeapIterator iterator)
+{
+    uint64_t slotCount;
+    uint64_t *forwardingPointer;
+    SLVM_ObjectHeader *objectHeader;
+    uint8_t *position;
+    uint8_t *start = (uint8_t*)heapInformation->start;
+    uint8_t *end = start + heapInformation->size;
+
+    position = start;
+    while(position < end)
+    {
+        /* Get a pointer to the forwarding pointer. */
+        forwardingPointer = (uint64_t*)position;
+
+        /* We are using the least significant bit to signal for size preheader. */
+        if(*forwardingPointer & 1)
+        {
+            slotCount = forwardingPointer[2];
+            position += 24;
+            objectHeader = (SLVM_ObjectHeader *)position;
+            assert(objectHeader->slotCount == 255);
+        }
+        else
+        {
+            position += 8;
+            objectHeader = (SLVM_ObjectHeader *)position;
+            slotCount = objectHeader->slotCount;
+            assert(objectHeader->slotCount < 255);
+        }
+
+        /* Call the iterator. */
+        iterator(heapInformation, (SLVM_Oop *)forwardingPointer, objectHeader, (size_t)slotCount);
+
+        /* Increase the position. */
+        position += sizeof(SLVM_ObjectHeader) + slotCount * sizeof(SLVM_Oop);
+
+        /* Align the position into a 16 byte boundary. */
+        position = (uint8_t*) (((uintptr_t)position + 15) & (-16));
+    }
+
+    assert(position == end);
+}
+
+SLVM_Oop *slvm_spur_heap_getForwardingPointerForObject(SLVM_Oop oop)
+{
+    SLVM_ObjectHeader *header = (SLVM_ObjectHeader *)oop;
+    if(header->slotCount == 255)
+        return (SLVM_Oop*) ((uint8_t*)header - 24);
+    else
+        return (SLVM_Oop*) ((uint8_t*)header - 8);
+}
 
 /**
  * The global class table
@@ -44,6 +105,16 @@ void slvm_spur_shutdown(void)
 {
 }
 
+/**
+ * Create a proper dynamic heap with garbage collection.
+ */
+static void *badMalloc(size_t size)
+{
+    uintptr_t result = (uintptr_t)malloc(size + 16);
+    result = (result + 15) & -16;
+    return (void*)result;
+}
+
 static SLVM_ObjectHeader *slvm_spur_instantiate_object(unsigned int format, size_t slotCount)
 {
     size_t totalSize;
@@ -54,7 +125,7 @@ static SLVM_ObjectHeader *slvm_spur_instantiate_object(unsigned int format, size
 
     /* Compute the preheader size. */
     if(slotCount >= 255)
-        preheaderSize = 8 + 16; // Big pre-header with alignment
+        preheaderSize = 8 + 16; // Big pre-header for alignment
     else
         preheaderSize = 8; // Small pre-header.
 
@@ -62,7 +133,7 @@ static SLVM_ObjectHeader *slvm_spur_instantiate_object(unsigned int format, size
     totalSize = preheaderSize + sizeof(SLVM_ObjectHeader) + slotCount * sizeof(SLVM_Oop);
 
     /* Allocate the object itself. */
-    rawResult = (uint8_t*)malloc(totalSize);
+    rawResult = (uint8_t*)badMalloc(totalSize);
     rawResult64 = (uint64_t*)rawResult;
 
     /* Set the object pre-header */
@@ -262,12 +333,93 @@ void slvm_dynrun_unregisterArrayOfRoots(SLVM_Oop *array, size_t numberOfElements
 {
 }
 
-void slvm_dynrun_registerStaticHeap(void *start, size_t size)
+static void slvm_internal_fixStaticHeap_clearAndSetForwarding(SLVM_HeapInformation *heapInformation, SLVM_Oop *forwardingPointer, SLVM_ObjectHeader *header, size_t slotCount)
 {
+    SLVM_Oop becomeTarget;
+    /* Clear the forwarding pointer. */
+    *forwardingPointer &= ~FORWARDING_POINTER_TAG_MASK;
+
+    /* Forward symbols into an interned version of them.*/
+    becomeTarget = (SLVM_Oop)header;
+    if(header->classIndex == SLVM_KCI_ByteSymbol || header->classIndex == SLVM_KCI_WideSymbol)
+        becomeTarget = (SLVM_Oop)slvm_Symbol_internString((SLVM_String*)header);
+
+    /* Update the forwarding pointer. */
+    if(becomeTarget != (SLVM_Oop)header)
+        *forwardingPointer |= becomeTarget;
 }
 
-void slvm_dynrun_unregisterStaticHeap(void *start, size_t size)
+static void slvm_spur_heap_applyNotNullForwarding(SLVM_HeapInformation *heapInformation, SLVM_Oop *forwardingPointer, SLVM_ObjectHeader *header, size_t slotCount)
 {
+    size_t i;
+    SLVM_Oop *objectData;
+    SLVM_Oop element;
+    SLVM_Oop elementForwarded;
+    SLVM_Oop *elementForwardingPointer;
+    SLVM_Oop heapStart = (SLVM_Oop)heapInformation->start;
+    SLVM_Oop heapEnd = heapStart + heapInformation->size;
+
+    /* If the object does not contain pointers, ignore it. */
+    if(header->objectFormat >= OF_INDEXABLE_64)
+        return;
+
+    /* Cast the object. */
+    objectData = (SLVM_Oop*)&header[1];
+    for(i = 0; i < slotCount; ++i)
+    {
+        element = objectData[i];
+
+        /* Only process the objects in the same heap. */
+        if(element < heapStart || heapEnd <= element)
+            continue;
+
+        /* Get the forwarded element. */
+        elementForwardingPointer = slvm_spur_heap_getForwardingPointerForObject(element);
+        elementForwarded = *elementForwardingPointer & (~FORWARDING_POINTER_TAG_MASK);
+
+        /* Only apply the forwarding if the forwarded element is not null. */
+        if(elementForwarded != 0)
+            objectData[i] = elementForwarded;
+    }
+}
+
+static void slvm_internal_fixStaticHeap(SLVM_HeapInformation *heapInformation)
+{
+    slvm_spur_heap_iterate(heapInformation, &slvm_internal_fixStaticHeap_clearAndSetForwarding);
+    slvm_spur_heap_iterate(heapInformation, &slvm_spur_heap_applyNotNullForwarding);
+}
+
+static void slvm_internal_init_staticHeap(SLVM_HeapInformation *heapInformation)
+{
+    if(heapInformation->flags & SHF_Initialized)
+        return;
+
+    if(heapInformation->flags & SHF_MayNeedFixingUp)
+        slvm_internal_fixStaticHeap(heapInformation);
+
+    heapInformation->flags |= SHF_Initialized;
+}
+
+void slvm_dynrun_registerStaticHeap(SLVM_HeapInformation *heapInformation)
+{
+    slvm_list_addNode(&staticHeaps, (SLVM_LinkedListNode*)heapInformation);
+    if(slvm_dynrun_isKernelInitialized())
+        slvm_internal_init_staticHeap(heapInformation);
+}
+
+void slvm_dynrun_unregisterStaticHeap(SLVM_HeapInformation *heapInformation)
+{
+    slvm_list_removeNode(&staticHeaps, (SLVM_LinkedListNode*)heapInformation);
+}
+
+void slvm_internal_init_staticHeaps(void)
+{
+    SLVM_LinkedListNode *currentNode;
+
+    assert(slvm_dynrun_isKernelInitialized());
+
+    for(currentNode = staticHeaps.first; currentNode; currentNode = currentNode->next)
+        slvm_internal_init_staticHeap((SLVM_HeapInformation*)currentNode);
 }
 
 #endif /* SLVM_SPUR_OBJECT_MODEL */

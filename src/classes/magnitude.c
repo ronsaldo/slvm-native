@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include "slvm/classes.h"
 
 SLVM_IMPLEMENT_KERNEL_CLASS(Magnitude, Object);
@@ -18,6 +19,18 @@ SLVM_IMPLEMENT_KERNEL_CLASS(Magnitude, Object);
 SLVM_IMPLEMENT_KERNEL_CLASS(Point, Object);
 
 /**
+ * SmallInteger primitives
+ */
+SLVM_Oop slvm_SmallInteger_primitive_asString(SLVM_Oop selector, SLVM_Oop receiver,
+     size_t oopArgumentCount, SLVM_Oop *oopArguments,
+     size_t nativeArgumentSize, void *nativeArguments)
+{
+    char buffer[128];
+    sprintf(buffer, "%lld", (long long)slvm_decodeSmallInteger(receiver));
+    return (SLVM_Oop)slvm_String_convertCString(buffer);
+}
+
+/**
  * Association
  */
 SLVM_Association *slvm_Association_new()
@@ -31,4 +44,9 @@ SLVM_Association *slvm_Association_make(SLVM_Oop key, SLVM_Oop value)
     result->_base_.key = key;
     result->value = value;
     return result;
+}
+
+void slvm_internal_init_magnitude(void)
+{
+    SLVM_KCLASS_ADD_PRIMITIVE(SmallInteger, "asString", asString);
 }

@@ -183,11 +183,22 @@ SLVM_IMPLEMENT_KERNEL_CLASS_EXPLICIT_FORMAT(className, superClassName, \
 #define SLVM_KCLASS(className) \
     (&slvm_kernel_class_ ## className)
 
+#define SLVM_KCLASS_DESCRIPTION(className) \
+    ((SLVM_ClassDescription*)SLVM_KCLASS(className))
+
+#define SLVM_KCLASS_BEHAVIOR(className) \
+    ((SLVM_Behavior*)SLVM_KCLASS(className))
+
 #define SLVM_KNEW(className, extraSize) \
     (SLVM_ ## className*) slvm_Behavior_basicNew((SLVM_Behavior*)SLVM_KCLASS(className), extraSize)
 
 #define SLVM_KCLASS_VARIABLE_SET(className, classVariableName, classVariableValue)  \
     slvm_IdentityDictionary_atPut((SLVM_IdentityDictionary*)SLVM_KCLASS(className)->classPool, \
         (SLVM_Oop)slvm_Symbol_internCString(#classVariableName), (SLVM_Oop)(classVariableValue))
+
+#define SLVM_KCLASS_ADD_PRIMITIVE(className, selector, primitiveNameSuffix) \
+    slvm_MethodDictionary_atPut(SLVM_KCLASS_BEHAVIOR(SmallInteger)->methodDict, \
+        (SLVM_Oop)slvm_Symbol_internCString(selector), \
+        (SLVM_Oop)slvm_PrimitiveMethod_make(&slvm_ ## className ## _primitive_ ## primitiveNameSuffix));
 
 #endif /* SLVM_CLASSES_KERNEL_H */

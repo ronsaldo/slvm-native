@@ -180,6 +180,7 @@ SLVM_Symbol *slvm_Symbol_internString(SLVM_String *string);
 SLVM_Symbol *slvm_Symbol_internCString(const char *cstring);
 
 void slvm_String_print(SLVM_String *object);
+void slvm_String_printLine(SLVM_String *object);
 void slvm_ByteString_print(SLVM_ByteString *object);
 void slvm_WideString_print(SLVM_WideString *object);
 

@@ -225,6 +225,12 @@ void slvm_WideString_print(SLVM_WideString *object)
     /* TODO: implement myself when it is possible. */
 }
 
+void slvm_String_printLine(SLVM_String *object)
+{
+    slvm_String_print(object);
+    puts("");
+}
+
 /**
  * Symbol
  */

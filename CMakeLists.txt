@@ -32,6 +32,9 @@ include(${CMAKE_ROOT}/Modules/CheckIncludeFileCXX.cmake)
 include(${CMAKE_ROOT}/Modules/CheckFunctionExists.cmake)
 include(${CMAKE_ROOT}/Modules/CheckLibraryExists.cmake)
 
+# Enable the assembler.
+enable_language(ASM-ATT)
+
 # Set output dir.
 set(EXECUTABLE_OUTPUT_PATH "${SlvmNativeRuntime_BINARY_DIR}/dist")
 set(LIBRARY_OUTPUT_PATH "${SlvmNativeRuntime_BINARY_DIR}/dist")

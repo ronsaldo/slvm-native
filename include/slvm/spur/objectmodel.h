@@ -153,7 +153,7 @@ typedef struct SLVM_Behavior_ SLVM_Behavior;
 #define slvm_decodeSmallInteger(oop) (oop >> SLVM_SPUR_SMALLINTEGER_TAG_BITS)
 
 #define slvm_getClassIndexFromOop(oop) (slvm_oopIsPointers(oop) ? ((SLVM_ObjectHeader*)(oop))->classIndex : ((oop) & SLVM_SPUR_TAG_MASK))
-#define slvm_getClassFromOop(oop) slvm_classTable[slvm_getClassIndexFromOop(oop)]
+#define slvm_getClassFromOop(oop) slvm_classTable[slvm_getClassIndexFromOop(oop) >> 12][slvm_getClassIndexFromOop(oop) & 1023]
 
 #define slvm_makeHashFromPointer(pointer) ((((SLVM_Oop) pointer) >> 4) & 0x3fffff)
 #define slvm_identityHash(oop) (slvm_oopIsImmediate(oop) ? (oop >> SLVM_SPUR_SMALLINTEGER_TAG_BITS) : ((SLVM_ObjectHeader*)oop)->identityHash)
