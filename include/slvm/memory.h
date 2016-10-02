@@ -11,7 +11,8 @@ enum SLVM_HeapFlags
 {
     SHF_CannotBeMove = 1<<0,
     SHF_MayNeedFixingUp = 1<<1,
-    SHF_Initialized = 1<<2,
+    SHF_HasPackageRegistration = 1<<2,
+    SHF_Initialized = 1<<10,
 };
 
 enum SLVM_MemoryPermissionFlags
@@ -21,7 +22,10 @@ enum SLVM_MemoryPermissionFlags
     SMPF_Executable = 1<<2,
 };
 
+typedef void (*SLVM_PackageRegistrationFunction) (void);
+
 typedef struct SLVM_HeapInformation_ SLVM_HeapInformation;
+typedef struct SLVM_HeapWithPackageInformation_ SLVM_HeapWithPackageInformation;
 typedef struct SLVM_StackHeapInformation_ SLVM_StackHeapInformation;
 
 struct SLVM_HeapInformation_
@@ -38,6 +42,12 @@ struct SLVM_StackHeapInformation_
     size_t capacity;
     size_t commitedCapacity;
     unsigned int permissions;
+};
+
+struct SLVM_HeapWithPackageInformation_
+{
+    SLVM_HeapInformation base;
+    SLVM_PackageRegistrationFunction packageRegistration;
 };
 
 /**

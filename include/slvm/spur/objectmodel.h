@@ -171,6 +171,8 @@ extern SLVM_Behavior** slvm_classTable[4096];
 extern void slvm_spur_initialize(void);
 extern void slvm_spur_shutdown(void);
 
+extern void slvm_objectmodel_registerBehavior(SLVM_Behavior *behavior);
+
 extern size_t slvm_basicSize(SLVM_Oop object);
 
 #endif /* SLVM_SPUR_OBJECT_MODEL_H */

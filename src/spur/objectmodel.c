@@ -10,6 +10,7 @@
 #ifdef SLVM_SPUR_OBJECT_MODEL
 #define FORWARDING_POINTER_TAG_MASK 7
 
+static unsigned int slvm_classTablePageCount = 0;
 static unsigned int slvm_classTableBaseSize = 0;
 static unsigned int slvm_classTableSize = 0;
 
@@ -125,7 +126,30 @@ void slvm_spur_initialize(void)
     /* Set the initial size of the table. */
     slvm_classTableBaseSize = 512;
     slvm_classTableSize = 0;
+    slvm_classTablePageCount = 1;
     slvm_classTable[0] = slvm_classTableFirstPage;
+}
+
+void slvm_objectmodel_registerBehavior(SLVM_Behavior *behavior)
+{
+    int i;
+    SLVM_Behavior** page;
+    unsigned int classIndex = slvm_classTableBaseSize + slvm_classTableSize;
+    unsigned int pageIndex = classIndex >> 12;
+    unsigned int elementIndex = classIndex & 1023;
+
+    if(pageIndex >= slvm_classTablePageCount)
+    {
+        page = slvm_classTable[pageIndex] = (SLVM_Behavior**)malloc(sizeof(slvm_classTableFirstPage));
+        for(i = 0; i < 1024; ++i)
+            page[i] = (SLVM_Behavior*)&slvm_nil;
+
+        slvm_classTablePageCount++;
+    }
+
+    behavior->_base_._header_.identityHash = classIndex;
+    slvm_classTable[pageIndex][elementIndex] = behavior;
+    slvm_classTableSize++;
 }
 
 void slvm_spur_shutdown(void)
@@ -408,11 +432,19 @@ static void slvm_internal_fixStaticHeap(SLVM_HeapInformation *heapInformation)
 
 static void slvm_internal_init_staticHeap(SLVM_HeapInformation *heapInformation)
 {
+    SLVM_HeapWithPackageInformation *packageInformation;
+
     if(heapInformation->flags & SHF_Initialized)
         return;
 
     if(heapInformation->flags & SHF_MayNeedFixingUp)
         slvm_internal_fixStaticHeap(heapInformation);
+
+    if(heapInformation->flags & SHF_HasPackageRegistration)
+    {
+        packageInformation = (SLVM_HeapWithPackageInformation *)heapInformation;
+        packageInformation->packageRegistration();
+    }
 
     heapInformation->flags |= SHF_Initialized;
 }

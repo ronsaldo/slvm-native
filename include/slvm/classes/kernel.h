@@ -106,6 +106,8 @@ extern SLVM_True slvm_true;
 extern SLVM_False slvm_false;
 
 #define slvm_nilOop ((SLVM_Oop)&slvm_nil)
+#define slvm_falseOop ((SLVM_Oop)&slvm_false)
+#define slvm_trueOop ((SLVM_Oop)&slvm_true)
 #define slvm_isNil(object) ((SLVM_Oop)object == slvm_nilOop)
 
 /**
@@ -117,6 +119,18 @@ extern SLVM_False slvm_false;
 
 extern SLVM_ProtoObject *slvm_Behavior_basicNew(SLVM_Behavior *behavior, size_t variableSize);
 extern SLVM_Oop slvm_Behavior_lookup(SLVM_Behavior *behavior, SLVM_Oop selector);
+
+/**
+ * Global dictionary
+ */
+extern SLVM_Oop slvm_globals_atOrNil(SLVM_Oop symbol);
+extern void slvm_globals_atPut(SLVM_Oop symbol, SLVM_Oop value);
+
+#define SLVM_GET_GLOBAL(globalName) \
+    slvm_globals_atOrNil((SLVM_Oop)slvm_Symbol_internCString(#globalName))
+
+#define SLVM_SET_GLOBAL(globalName, value) \
+    slvm_globals_atPut((SLVM_Oop)slvm_Symbol_internCString(#globalName), (SLVM_Oop)(value))
 
 /**
  * Implementation of the kernel classes.
@@ -200,5 +214,23 @@ SLVM_IMPLEMENT_KERNEL_CLASS_EXPLICIT_FORMAT(className, superClassName, \
     slvm_MethodDictionary_atPut(SLVM_KCLASS_BEHAVIOR(SmallInteger)->methodDict, \
         (SLVM_Oop)slvm_Symbol_internCString(selector), \
         (SLVM_Oop)slvm_PrimitiveMethod_make(&slvm_ ## className ## _primitive_ ## primitiveNameSuffix));
+
+#define SLVM_SELECTOR(value) ((SLVM_Oop)slvm_Symbol_internCString(value))
+/**
+ * Class and method registration.
+ */
+extern SLVM_Oop slvm_dynrun_subclassWithNames(SLVM_Oop superClassName,
+        SLVM_Oop name,
+        SLVM_Oop instanceVariableNames, SLVM_Oop format,
+        SLVM_Oop metaInstanceVariableNames, SLVM_Oop metaFormat,
+        SLVM_Oop classVariablesNames, SLVM_Oop poolDictionaries,
+        SLVM_Oop categoryName);
+extern SLVM_Oop slvm_dynrun_registerMethodWithNames(SLVM_Oop method, SLVM_Oop selector, SLVM_Oop className, SLVM_Oop classSide);
+
+/**
+ * Message send
+ */
+extern void slvm_dynrun_send(void *stackPointer);
+extern SLVM_Oop slvm_dynrun_csend(int argumentDescription, SLVM_Oop selector, ...);
 
 #endif /* SLVM_CLASSES_KERNEL_H */

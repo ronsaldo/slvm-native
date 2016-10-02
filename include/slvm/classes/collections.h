@@ -157,6 +157,7 @@ SLVM_Oop slvm_MethodDictionary_atOrNil(SLVM_MethodDictionary *dictionary, SLVM_O
 SLVM_Association *slvm_IdentityDictionary_associationAt(SLVM_IdentityDictionary *dictionary, SLVM_Oop key);
 void slvm_IdentityDictionary_addAssociation(SLVM_IdentityDictionary *dictionary, SLVM_Association *association);
 void slvm_IdentityDictionary_atPut(SLVM_IdentityDictionary *dictionary, SLVM_Oop key, SLVM_Oop value);
+SLVM_Oop slvm_IdentityDictionary_atOrNil(SLVM_IdentityDictionary *dictionary, SLVM_Oop key);
 
 SLVM_SystemDictionary *slvm_SystemDictionary_new();
 

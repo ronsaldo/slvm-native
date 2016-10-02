@@ -459,6 +459,24 @@ void slvm_IdentityDictionary_atPut(SLVM_IdentityDictionary *dictionary, SLVM_Oop
     }
 }
 
+SLVM_Oop slvm_IdentityDictionary_atOrNil(SLVM_IdentityDictionary *dictionary, SLVM_Oop key)
+{
+    intptr_t index;
+    SLVM_Association *element;
+
+    assert(!slvm_isNil(dictionary));
+
+    /* Find the association. */
+    index = slvm_IdentityDictionary_scanFor(dictionary, key);
+    assert(index >= 0);
+
+    /* Read the value in the association, if not nil. */
+    element = (SLVM_Association*)dictionary->array->data[index];
+    if(slvm_isNil(element))
+        return slvm_nilOop;
+    return element->value;
+}
+
 /**
  * MethodDictionary
  */

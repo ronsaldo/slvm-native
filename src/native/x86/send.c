@@ -1,9 +1,11 @@
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include "slvm/dynrun.h"
 
 typedef struct
 {
+    void *framePointer;
     void *returnPointer;
     uint16_t oopArgumentCount;
     uint16_t nativeArgumentSize;
@@ -15,10 +17,12 @@ typedef struct
 
 typedef struct
 {
+    void *framePointer;
     void *returnPointer;
 } MessageSendResultStackFrame;
 
 extern void _slvm_dynrun_returnToSend_trap(void *restoreStackPointer, void* returnValue);
+extern SLVM_Oop _slvm_dynrun_smalltalk_sendWithArguments(void *entryPoint, uint32_t argumentDescription, SLVM_Oop receiver, SLVM_Oop *oopArguments, void *nativeArguments);
 
 /* Since the message send calling convention is different to C calling convention, we cannot just return. */
 void slvm_dynrun_returnToSend(void *stackPointer, void* returnValue)
@@ -35,13 +39,14 @@ void slvm_dynrun_returnToSend(void *stackPointer, void* returnValue)
 
     /* Move the return pointer up in the stack. */
     resultStackFrame = (MessageSendResultStackFrame*) ((uint8_t*)stackPointer + totalArgumentsSize - sizeof(MessageSendResultStackFrame));
+    resultStackFrame->framePointer = requiredArguments->framePointer;
     resultStackFrame->returnPointer = requiredArguments->returnPointer;
 
     /* Set the return value and restore the stack. */
     _slvm_dynrun_returnToSend_trap(resultStackFrame, returnValue);
 }
 
-void slvm_dynrun_send(void *stackPointer)
+void* slvm_dynrun_send_dispatch(int senderCallingConvention, void *stackPointer)
 {
     SLVM_Oop method;
     SLVM_Oop result;
@@ -49,9 +54,14 @@ void slvm_dynrun_send(void *stackPointer)
     SLVM_Behavior *behavior;
     SLVM_CompiledMethod *compiledMethod;
     SLVM_PrimitiveMethod *primitiveMethod;
+    unsigned int targetCallingConvention;
     unsigned int methodClass;
 
     MessageSendRequiredArguments *requiredArguments = (MessageSendRequiredArguments*)stackPointer;
+    /*
+    printf("Send dispatch %p %d %d: ", stackPointer, requiredArguments->oopArgumentCount, requiredArguments->nativeArgumentSize);
+    slvm_String_printLine((SLVM_String*)requiredArguments->selector);
+    */
 
     /* Get the receiver class. */
     behavior = slvm_getClassFromOop(requiredArguments->receiver);
@@ -76,12 +86,50 @@ void slvm_dynrun_send(void *stackPointer)
         if(methodClass == SLVM_KCI_CompiledMethod)
         {
             compiledMethod = (SLVM_CompiledMethod*)method;
-            printf("Found a compiled method: %p\n", compiledMethod);
+            targetCallingConvention = slvm_CompiledMethod_getCallingConvention(compiledMethod);
+            /* Invoke the compiled method. Using the correct trampoline for
+               adjusting for the calling conventions. */
+            if(senderCallingConvention == SLVM_CC_Smalltalk)
+            {
+                printf("Send from Smalltalk stack\n");
+                if(targetCallingConvention == SLVM_CC_Smalltalk)
+                {
+                    /* Adjust the stack pointer and jump to the called method */
+                    printf("TODO: Send from Smalltalk stack to Smalltalk stack\n");
+                }
+                else
+                {
+                    printf("TODO: Send from Smalltalk stack to C stack\n");
+                }
+            }
+            else if(senderCallingConvention == SLVM_CC_CDecl)
+            {
+                if(targetCallingConvention == SLVM_CC_CDecl)
+                {
+                    /* Adjust the stack pointer and jump to the called method */
+                    printf("TODO: Send from C stack to C stack\n");
+                }
+                else if(targetCallingConvention == SLVM_CC_Smalltalk)
+                {
+                    /* Push again the arguments in the stack. */
+                    result = _slvm_dynrun_smalltalk_sendWithArguments(
+                        (void*) (compiledMethod->entryPoint - 1),
+                        requiredArguments->oopArgumentCount | (requiredArguments->nativeArgumentSize << 16),
+                        requiredArguments->receiver, requiredArguments->oopArguments,
+                        &requiredArguments->oopArguments[requiredArguments->oopArgumentCount]);
+                    return (void*) result;
+                }
+            }
+            else
+            {
+                fprintf(stderr, "Unsupported sender calling convention: %d\n", senderCallingConvention);
+                abort();
+            }
         }
         else if(methodClass == SLVM_KCI_PrimitiveMethod)
         {
             /* Create the primitive context */
-            PrimitiveContext context = {
+            SLVM_PrimitiveContext context = {
                 .stackPointer = stackPointer,
                 .selector = requiredArguments->selector, .receiver = requiredArguments->receiver,
                 .oopArgumentCount = requiredArguments->oopArgumentCount, .oopArguments = requiredArguments->oopArguments,
@@ -92,8 +140,18 @@ void slvm_dynrun_send(void *stackPointer)
             primitiveMethod = (SLVM_PrimitiveMethod*)method;
             result = primitiveMethod->entryPoint(&context);
 
-            /* Return through the trampoline. */
-            return slvm_dynrun_returnToSend(stackPointer, (void*)result);
+            /* Return adjusting for the caller convention. */
+            if(senderCallingConvention == SLVM_CC_Smalltalk)
+            {
+                slvm_dynrun_returnToSend(stackPointer, (void*)result);
+                printf("Primitive return to smalltalk return should not be reached\n");
+                abort();
+            }
+            else
+            {
+                assert(senderCallingConvention == SLVM_CC_CDecl);
+                return (void*)result;
+            }
         }
         else
         {

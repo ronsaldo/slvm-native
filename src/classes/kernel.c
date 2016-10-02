@@ -88,6 +88,19 @@ SLVM_Oop slvm_Behavior_lookup(SLVM_Behavior *behavior, SLVM_Oop selector)
 }
 
 /**
+ * Global dictionary
+ */
+SLVM_Oop slvm_globals_atOrNil(SLVM_Oop symbol)
+{
+    return slvm_IdentityDictionary_atOrNil((SLVM_IdentityDictionary*)kernelRoots.globals, symbol);
+}
+
+void slvm_globals_atPut(SLVM_Oop symbol, SLVM_Oop value)
+{
+    slvm_IdentityDictionary_atPut((SLVM_IdentityDictionary*)kernelRoots.globals, symbol, value);
+}
+
+/**
  * Kernel class initialization.
  */
 void slvm_internal_init_classes(void)
@@ -111,4 +124,122 @@ void slvm_internal_init_classes(void)
 
 #undef COMPACT_CLASS_INDEX
 #undef COMPACT_CLASS_ALIAS_INDEX
+}
+
+/**
+ * Package registration methods.
+ */
+extern SLVM_Oop slvm_dynrun_subclassWithNames(SLVM_Oop superClassName,
+        SLVM_Oop name,
+        SLVM_Oop instanceVariableNames, SLVM_Oop format,
+        SLVM_Oop metaInstanceVariableNames, SLVM_Oop metaFormat,
+        SLVM_Oop classVariablesNames, SLVM_Oop poolDictionaries,
+        SLVM_Oop categoryName)
+{
+    SLVM_Oop existing;
+    SLVM_Oop superClassOop;
+    SLVM_Metaclass *superMetaclass;
+    SLVM_Class *superClass;
+
+    SLVM_Metaclass *metaClass;
+    SLVM_Behavior *metaClassBehavior;
+    SLVM_ClassDescription *metaClassDescription;
+
+    SLVM_Class *clazz;
+    SLVM_Behavior *classBehavior;
+    SLVM_ClassDescription *classDescription;
+
+    /*printf("Register class: ");
+    slvm_String_printLine((SLVM_String*)name);*/
+
+    /* Try to find an existing version*/
+    existing = slvm_IdentityDictionary_atOrNil((SLVM_IdentityDictionary*)kernelRoots.globals, name);
+    if(!slvm_isNil(existing))
+        return existing;
+
+    /* Fetch the super class */
+    superClassOop = slvm_IdentityDictionary_atOrNil((SLVM_IdentityDictionary*)kernelRoots.globals, superClassName);
+    if(slvm_isNil(superClassOop) || slvm_oopIsImmediate(superClassOop))
+    {
+        fprintf(stderr, "Fatal Error: Failed to find super class on package registration: ");
+        slvm_String_printLine((SLVM_String*)superClassName);
+        abort();
+    }
+
+    /* Fetch the meta class */
+    superClass = (SLVM_Class*)superClassOop;
+    superMetaclass = (SLVM_Metaclass*)slvm_getClassFromOop(superClassOop);
+
+    /* Create the metaclass */
+    metaClass = SLVM_KNEW(Metaclass, 0);
+
+    metaClassBehavior = (SLVM_Behavior*)metaClass;
+    slvm_objectmodel_registerBehavior(metaClassBehavior);
+
+    metaClassBehavior->format = metaFormat;
+    metaClassBehavior->methodDict = slvm_MethodDictionary_new();
+
+    metaClassDescription = (SLVM_ClassDescription*)metaClass;
+    metaClassDescription->instanceVariables = metaInstanceVariableNames;
+
+    /* Create the class */
+    classBehavior = (SLVM_Behavior*)slvm_Behavior_basicNew(metaClassBehavior, 0);
+    assert(slvm_getClassFromOop((SLVM_Oop)classBehavior) == metaClassBehavior);
+    slvm_objectmodel_registerBehavior(classBehavior);
+
+    classBehavior->format = format;
+    classBehavior->methodDict = slvm_MethodDictionary_new();
+
+    classDescription = (SLVM_ClassDescription*)classBehavior;
+    classDescription->instanceVariables = instanceVariableNames;
+
+    clazz = (SLVM_Class*)classBehavior;
+    clazz->category = categoryName;
+    clazz->name = name;
+
+    /* Link the metaclass with its class */
+    metaClass->thisClass = clazz;
+
+    /* Register the class in the system dictionary. */
+    slvm_IdentityDictionary_atPut((SLVM_IdentityDictionary*)kernelRoots.globals, clazz->name, (SLVM_Oop)clazz);
+    return (SLVM_Oop)metaClass;
+}
+
+extern SLVM_Oop slvm_dynrun_registerMethodWithNames(SLVM_Oop method, SLVM_Oop selector, SLVM_Oop className, SLVM_Oop classSide)
+{
+    SLVM_Oop classOop;
+    SLVM_Behavior *clazz;
+    SLVM_Behavior *metaclass;
+
+    /* Find the class. */
+    classOop = slvm_IdentityDictionary_atOrNil((SLVM_IdentityDictionary*)kernelRoots.globals, className);
+    /*printf("Method flags: %p\n", (void*)((SLVM_CompiledMethod*)method)->flags);
+    printf("Register selector: ");
+    slvm_String_printLine((SLVM_String*)selector);
+
+    printf("Find method class %p %d\n", (void*)classOop, slvm_isNil(classOop));
+    printf("ClassName %p:", (void*)className);
+    slvm_String_printLine((SLVM_String*)className);*/
+
+    if(slvm_isNil(classOop))
+        return slvm_falseOop;
+
+    /* Fetch the metaclass */
+    metaclass = slvm_getClassFromOop(classOop);
+    assert(metaclass->_base_._header_.classIndex == SLVM_KCI_Metaclass);
+
+    /* Register the method in the method dictionary. */
+    if(classSide == slvm_trueOop)
+    {
+        /* printf("Register in class side.\n"); */
+        slvm_MethodDictionary_atPut(metaclass->methodDict, selector, method);
+    }
+    else
+    {
+        clazz = (SLVM_Behavior*)classOop;
+        /* printf("Register in instance side.\n"); */
+        slvm_MethodDictionary_atPut(clazz->methodDict, selector, method);
+    }
+
+    return slvm_trueOop;
 }

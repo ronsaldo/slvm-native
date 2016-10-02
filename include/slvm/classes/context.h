@@ -13,7 +13,14 @@ typedef SLVM_Object SLVM_BlockClosure;
 typedef SLVM_Object SLVM_Mutex;
 typedef SLVM_Object SLVM_Semaphore;
 
-typedef struct PrimitiveContext_
+enum SLVM_CallingConvention
+{
+    SLVM_CC_Smalltalk = 0,
+    SLVM_CC_CDecl,
+    SLVM_CC_StdCall,
+};
+
+typedef struct SLVM_PrimitiveContext_
 {
     void *stackPointer;
     SLVM_Oop selector;
@@ -24,14 +31,16 @@ typedef struct PrimitiveContext_
 
     size_t nativeArgumentSize;
     void *nativeArguments;
-} PrimitiveContext;
+} SLVM_PrimitiveContext;
 
-typedef SLVM_Oop (*SLVM_PrimitiveFunction) (PrimitiveContext *context);
+typedef SLVM_Oop (*SLVM_PrimitiveFunction) (SLVM_PrimitiveContext *context);
 
 struct SLVM_CompiledMethod_
 {
     SLVM_Object _header_;
     SLVM_Oop entryPoint;
+    SLVM_Oop flags;
+    SLVM_Oop annotations;
     SLVM_Oop literals[];
 };
 
@@ -40,6 +49,9 @@ struct SLVM_PrimitiveMethod_
     SLVM_Object _header_;
     SLVM_PrimitiveFunction entryPoint;
 };
+
+#define slvm_CompiledMethod_getCallingConvention(method) \
+    (slvm_decodeSmallInteger(method->flags) & 7)
 
 SLVM_DECLARE_KERNEL_CLASS(CompiledMethod)
 SLVM_DECLARE_KERNEL_CLASS(PrimitiveMethod)
