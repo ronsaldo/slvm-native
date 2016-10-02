@@ -28,14 +28,34 @@ slvm_dynrun_csend:
     popl %ebp
     ret
 
-.global _slvm_dynrun_returnToSend_trap
-_slvm_dynrun_returnToSend_trap:
+.global _slvm_dynrun_returnToSender_trap
+_slvm_dynrun_returnToSender_trap:
     movl 8(%esp), %eax
     movl 4(%esp), %esp
     popl %ebp
     ret
 
-.global memcpy
+# (4) restoreStackPointer, (8)methodPointer
+.global _slvm_dynrun_returnToMethod_trap
+_slvm_dynrun_returnToMethod_trap:
+    # Store the method pointer in EAX
+    movl 8(%esp), %eax
+
+    # Restore the stack frame.
+    movl 4(%esp), %esp
+    popl %ebp
+
+    # Put the method pointer below the return pointer position.
+    # Argument description point.
+    movl %eax, 4(%esp)
+
+    # Move the return pointer to where the selector is located.
+    popl %eax
+    movl %eax, 4(%esp)
+
+    # Return to the method.
+    ret
+
 .global _slvm_dynrun_smalltalk_sendWithArguments
 # (8) entryPoint, (12) argumentDescription [12 oopCount, 14 nativeCount], (16)SLVM_Oop receiver, (20) oopArguments, (24)nativeArguments
 _slvm_dynrun_smalltalk_sendWithArguments:
@@ -47,7 +67,7 @@ _slvm_dynrun_smalltalk_sendWithArguments:
 
     # Align the stack.
     andl $-16, %esp
-    
+
     # Reserve the native space
     movzxw 14(%ebp), %ecx
     subl %ecx, %esp

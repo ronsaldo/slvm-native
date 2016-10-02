@@ -21,11 +21,12 @@ typedef struct
     void *returnPointer;
 } MessageSendResultStackFrame;
 
-extern void _slvm_dynrun_returnToSend_trap(void *restoreStackPointer, void* returnValue);
+extern void _slvm_dynrun_returnToSender_trap(void *restoreStackPointer, void* returnValue);
+extern void _slvm_dynrun_returnToMethod_trap(void *restoreStackPointer, void* methodPointer);
 extern SLVM_Oop _slvm_dynrun_smalltalk_sendWithArguments(void *entryPoint, uint32_t argumentDescription, SLVM_Oop receiver, SLVM_Oop *oopArguments, void *nativeArguments);
 
 /* Since the message send calling convention is different to C calling convention, we cannot just return. */
-void slvm_dynrun_returnToSend(void *stackPointer, void* returnValue)
+void slvm_dynrun_returnToSender(void *stackPointer, void* returnValue)
 {
     size_t totalArgumentsSize;
     MessageSendRequiredArguments *requiredArguments;
@@ -43,7 +44,7 @@ void slvm_dynrun_returnToSend(void *stackPointer, void* returnValue)
     resultStackFrame->returnPointer = requiredArguments->returnPointer;
 
     /* Set the return value and restore the stack. */
-    _slvm_dynrun_returnToSend_trap(resultStackFrame, returnValue);
+    _slvm_dynrun_returnToSender_trap(resultStackFrame, returnValue);
 }
 
 void* slvm_dynrun_send_dispatch(int senderCallingConvention, void *stackPointer)
@@ -95,7 +96,9 @@ void* slvm_dynrun_send_dispatch(int senderCallingConvention, void *stackPointer)
                 if(targetCallingConvention == SLVM_CC_Smalltalk)
                 {
                     /* Adjust the stack pointer and jump to the called method */
-                    printf("TODO: Send from Smalltalk stack to Smalltalk stack\n");
+                    _slvm_dynrun_returnToMethod_trap(stackPointer, (void*)(compiledMethod->entryPoint - 1));
+                    printf("_slvm_dynrun_returnToMethod_trap should not have returned.\n");
+                    abort();
                 }
                 else
                 {
@@ -107,7 +110,9 @@ void* slvm_dynrun_send_dispatch(int senderCallingConvention, void *stackPointer)
                 if(targetCallingConvention == SLVM_CC_CDecl)
                 {
                     /* Adjust the stack pointer and jump to the called method */
-                    printf("TODO: Send from C stack to C stack\n");
+                    _slvm_dynrun_returnToMethod_trap(stackPointer, (void*)(compiledMethod->entryPoint - 1));
+                    printf("_slvm_dynrun_returnToMethod_trap should not have returned.\n");
+                    abort();
                 }
                 else if(targetCallingConvention == SLVM_CC_Smalltalk)
                 {
@@ -143,7 +148,7 @@ void* slvm_dynrun_send_dispatch(int senderCallingConvention, void *stackPointer)
             /* Return adjusting for the caller convention. */
             if(senderCallingConvention == SLVM_CC_Smalltalk)
             {
-                slvm_dynrun_returnToSend(stackPointer, (void*)result);
+                slvm_dynrun_returnToSender(stackPointer, (void*)result);
                 printf("Primitive return to smalltalk return should not be reached\n");
                 abort();
             }
