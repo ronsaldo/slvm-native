@@ -8,7 +8,7 @@
 #include "slvm/lifecycle.h"
 
 #ifdef SLVM_SPUR_OBJECT_MODEL
-#define FORWARDING_POINTER_TAG_MASK 7
+#define FORWARDING_POINTER_TAG_MASK 3
 
 static unsigned int slvm_classTablePageCount = 0;
 static unsigned int slvm_classTableBaseSize = 0;
@@ -409,6 +409,8 @@ static void slvm_spur_heap_applyNotNullForwarding(SLVM_HeapInformation *heapInfo
     for(i = 0; i < slotCount; ++i)
     {
         element = objectData[i];
+        if(!slvm_oopIsPointers(element))
+            continue;
 
         /* Only process the objects in the same heap. */
         if(element < heapStart || heapEnd <= element)
@@ -471,4 +473,8 @@ void slvm_internal_init_staticHeaps(void)
         slvm_internal_init_staticHeap((SLVM_HeapInformation*)currentNode);
 }
 
+extern SLVM_Oop slvm_makeInteger(SLVM_Oop value)
+{
+    return slvm_encodeSmallInteger(value);
+}
 #endif /* SLVM_SPUR_OBJECT_MODEL */

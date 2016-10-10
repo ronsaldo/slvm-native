@@ -20,8 +20,19 @@ enum SLVM_CallingConvention
     SLVM_CC_StdCall,
 };
 
+enum SLVM_PrimitiveErrorCode
+{
+    SLVM_PrimitiveError_Success = 0,
+    SLVM_PrimitiveError_Error,
+    SLVM_PrimitiveError_InvalidArgumentCount,
+    SLVM_PrimitiveError_InvalidArgument,
+
+    SLVM_PrimitiveError_Generic = 1000
+};
+
 typedef struct SLVM_PrimitiveContext_
 {
+    int errorCode;
     void *stackPointer;
     SLVM_Oop selector;
     SLVM_Oop receiver;
@@ -64,5 +75,12 @@ SLVM_DECLARE_KERNEL_CLASS(Mutex)
 SLVM_DECLARE_KERNEL_CLASS(Semaphore)
 
 SLVM_PrimitiveMethod *slvm_PrimitiveMethod_make(SLVM_PrimitiveFunction function);
+
+#define slvm_primitiveFailWithError(context, errorCodeValue) { \
+    (context)->errorCode = errorCodeValue; \
+    return slvm_nilOop; \
+} \
+
+#define slvm_primitiveFail(context) slvm_primitiveFailWithError(context, SLVM_PrimitiveError_Error)
 
 #endif /* SLVM_CLASSES_CONTEXT_H */

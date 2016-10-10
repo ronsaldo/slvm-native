@@ -2,7 +2,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "slvm/classes/collections.h"
+#include "slvm/classes.h"
 #include "slvm/memory.h"
 
 SLVM_IMPLEMENT_KERNEL_CLASS(Collection, Object);
@@ -231,6 +231,11 @@ void slvm_String_printLine(SLVM_String *object)
     puts("");
 }
 
+static SLVM_Oop slvm_String_primitive_printToStdout(SLVM_PrimitiveContext *context)
+{
+    slvm_String_printLine((SLVM_String*)context->receiver);
+    return context->receiver;
+}
 /**
  * Symbol
  */
@@ -527,6 +532,8 @@ void slvm_MethodDictionary_grow(SLVM_MethodDictionary *dictionary)
     SLVM_Array *oldKeys;
     SLVM_Oop element;
 
+    printf("slvm_MethodDictionary_grow\n");
+
     /* Duplicate the dictionary capacity. */
     arraySize = slvm_basicSize((SLVM_Oop)dictionary->keys);
     newArraySize = arraySize * 2;
@@ -561,7 +568,7 @@ void slvm_MethodDictionary_atPut(SLVM_MethodDictionary *dictionary, SLVM_Oop key
         return slvm_MethodDictionary_atPut(dictionary, key, value);
     }
 
-    if(slvm_isNil(dictionary->keys))
+    if(slvm_isNil(dictionary->keys->data[index]))
     {
         dictionary->keys->data[index] = key;
         dictionary->_base_.array->data[index] = value;
@@ -693,6 +700,7 @@ void slvm_WeakSet_grow(SLVM_WeakSet *set, SLVM_HashFunction hashFunction, SLVM_E
 {
     size_t arraySize;
     size_t newArraySize;
+    printf("WeakSet grow\n");
 
     /* Try to recreate into a set of the same size. This will remove any nil
        element that was added by the GC. */
@@ -735,4 +743,7 @@ void slvm_internal_init_collections(void)
     /* Symbol class variables. */
     SLVM_KCLASS_VARIABLE_SET(Symbol, NewSymbols, collectionRoots.newSymbols);
     SLVM_KCLASS_VARIABLE_SET(Symbol, SymbolTable, collectionRoots.symbolTable);
+
+    /* Primitives */
+    SLVM_KCLASS_ADD_PRIMITIVE(String, "printToStdout", printToStdout);
 }

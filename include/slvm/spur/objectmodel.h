@@ -164,6 +164,8 @@ typedef struct SLVM_Behavior_ SLVM_Behavior;
 #define slvm_makeHashFromPointer(pointer) ((((SLVM_Oop) pointer) >> 4) & 0x3fffff)
 #define slvm_identityHash(oop) (slvm_oopIsImmediate(oop) ? (oop >> SLVM_SPUR_SMALLINTEGER_TAG_BITS) : ((SLVM_ObjectHeader*)oop)->identityHash)
 
+extern SLVM_Oop slvm_makeInteger(SLVM_Oop value);
+
 /**
  * A sparse class table
  **/

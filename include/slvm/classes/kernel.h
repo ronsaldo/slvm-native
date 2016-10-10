@@ -110,6 +110,7 @@ extern SLVM_False slvm_false;
 #define slvm_trueOop ((SLVM_Oop)&slvm_true)
 #define slvm_isNil(object) ((SLVM_Oop)object == slvm_nilOop)
 
+#define slvm_encodeBoolean(expr) ((expr) ? slvm_trueOop : slvm_falseOop)
 /**
  * Behavior methods
  */
@@ -211,7 +212,7 @@ SLVM_IMPLEMENT_KERNEL_CLASS_EXPLICIT_FORMAT(className, superClassName, \
         (SLVM_Oop)slvm_Symbol_internCString(#classVariableName), (SLVM_Oop)(classVariableValue))
 
 #define SLVM_KCLASS_ADD_PRIMITIVE(className, selector, primitiveNameSuffix) \
-    slvm_MethodDictionary_atPut(SLVM_KCLASS_BEHAVIOR(SmallInteger)->methodDict, \
+    slvm_MethodDictionary_atPut(SLVM_KCLASS_BEHAVIOR(className)->methodDict, \
         (SLVM_Oop)slvm_Symbol_internCString(selector), \
         (SLVM_Oop)slvm_PrimitiveMethod_make(&slvm_ ## className ## _primitive_ ## primitiveNameSuffix));
 

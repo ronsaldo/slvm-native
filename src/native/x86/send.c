@@ -59,8 +59,9 @@ void* slvm_dynrun_send_dispatch(int senderCallingConvention, void *stackPointer)
     unsigned int methodClass;
 
     MessageSendRequiredArguments *requiredArguments = (MessageSendRequiredArguments*)stackPointer;
+
     /*
-    printf("Send dispatch %p %d %d: ", stackPointer, requiredArguments->oopArgumentCount, requiredArguments->nativeArgumentSize);
+    printf("Send[%p] dispatch to %p: %p %d %d: ", (void*)requiredArguments->selector, (void*)requiredArguments->receiver, stackPointer, requiredArguments->oopArgumentCount, requiredArguments->nativeArgumentSize);
     slvm_String_printLine((SLVM_String*)requiredArguments->selector);
     */
 
@@ -92,7 +93,6 @@ void* slvm_dynrun_send_dispatch(int senderCallingConvention, void *stackPointer)
                adjusting for the calling conventions. */
             if(senderCallingConvention == SLVM_CC_Smalltalk)
             {
-                printf("Send from Smalltalk stack\n");
                 if(targetCallingConvention == SLVM_CC_Smalltalk)
                 {
                     /* Adjust the stack pointer and jump to the called method */
@@ -135,6 +135,7 @@ void* slvm_dynrun_send_dispatch(int senderCallingConvention, void *stackPointer)
         {
             /* Create the primitive context */
             SLVM_PrimitiveContext context = {
+                .errorCode = SLVM_PrimitiveError_Success,
                 .stackPointer = stackPointer,
                 .selector = requiredArguments->selector, .receiver = requiredArguments->receiver,
                 .oopArgumentCount = requiredArguments->oopArgumentCount, .oopArguments = requiredArguments->oopArguments,
@@ -144,6 +145,14 @@ void* slvm_dynrun_send_dispatch(int senderCallingConvention, void *stackPointer)
             /* Call the primitive. */
             primitiveMethod = (SLVM_PrimitiveMethod*)method;
             result = primitiveMethod->entryPoint(&context);
+
+            /* Check the error code. */
+            if(context.errorCode != SLVM_PrimitiveError_Success)
+            {
+                fprintf(stderr, "Primitive without fallback context failed! Aborting.");
+                slvm_String_printLine((SLVM_String*)requiredArguments->selector);
+                abort();
+            }
 
             /* Return adjusting for the caller convention. */
             if(senderCallingConvention == SLVM_CC_Smalltalk)

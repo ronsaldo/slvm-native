@@ -61,10 +61,10 @@ SLVM_Oop slvm_Behavior_lookup(SLVM_Behavior *behavior, SLVM_Oop selector)
      */
     for(current = behavior; !slvm_isNil(current); current = current->superclass)
     {
-         methodDictionary = current->methodDict;
+        methodDictionary = current->methodDict;
 
-         /* Ignore nil method dictionaries. */
-         if(slvm_isNil(current->methodDict))
+        /* Ignore nil method dictionaries. */
+        if(slvm_isNil(current->methodDict))
             continue;
 
         /* Make sure this is actually a method dictionary. */
@@ -242,4 +242,64 @@ extern SLVM_Oop slvm_dynrun_registerMethodWithNames(SLVM_Oop method, SLVM_Oop se
     }
 
     return slvm_trueOop;
+}
+
+/**
+ * ProtoObject primitives
+ */
+static SLVM_Oop slvm_ProtoObject_primitive_asString(SLVM_PrimitiveContext *context)
+{
+    SLVM_Behavior *behavior = slvm_getClassFromOop(context->receiver);
+    unsigned int metaclassIndex = slvm_getClassIndexFromOop((SLVM_Oop)behavior);
+    if(metaclassIndex == SLVM_KCI_Metaclass)
+        return ((SLVM_Metaclass*)behavior)->thisClass->name;
+    else
+        return ((SLVM_Class*)behavior)->name;
+}
+
+static SLVM_Oop slvm_ProtoObject_primitive_basicSize(SLVM_PrimitiveContext *context)
+{
+    return slvm_encodeSmallInteger(slvm_basicSize(context->receiver));
+}
+
+static SLVM_Oop slvm_ProtoObject_primitive_class(SLVM_PrimitiveContext *context)
+{
+    return (SLVM_Oop)slvm_getClassFromOop(context->receiver);
+}
+
+/**
+ * Behavior primitives
+ */
+static SLVM_Oop slvm_Behavior_primitive_basicNew(SLVM_PrimitiveContext *context)
+{
+    SLVM_Behavior *behavior = (SLVM_Behavior*)context->receiver;
+    size_t variableSize = 0;
+
+    if(context->oopArgumentCount == 1)
+    {
+        if(!slvm_oopIsSmallInteger(context->oopArguments[0]))
+            slvm_primitiveFailWithError(context, SLVM_PrimitiveError_InvalidArgument);
+
+        variableSize = slvm_decodeSmallInteger(context->oopArguments[0]);
+    }
+
+    return (SLVM_Oop)slvm_Behavior_basicNew(behavior, variableSize);
+}
+
+static SLVM_Oop slvm_Behavior_primitive_registerAsBehavior(SLVM_PrimitiveContext *context)
+{
+    slvm_objectmodel_registerBehavior((SLVM_Behavior*)context->receiver);
+    return context->receiver;
+}
+
+void slvm_internal_init_kernel(void)
+{
+    /* ProtoObject */
+    SLVM_KCLASS_ADD_PRIMITIVE(ProtoObject, "asString", asString);
+    SLVM_KCLASS_ADD_PRIMITIVE(ProtoObject, "class", class);
+    SLVM_KCLASS_ADD_PRIMITIVE(ProtoObject, "basicSize", basicSize);
+
+    /* Behavior */
+    SLVM_KCLASS_ADD_PRIMITIVE(Behavior, "basicNew", basicNew);
+    SLVM_KCLASS_ADD_PRIMITIVE(Behavior, "registerAsBehavior", registerAsBehavior);
 }

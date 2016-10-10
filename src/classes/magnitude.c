@@ -1,4 +1,6 @@
 #include <stdio.h>
+#include <stdlib.h>
+#include <assert.h>
 #include "slvm/classes.h"
 
 SLVM_IMPLEMENT_KERNEL_CLASS(Magnitude, Object);
@@ -21,7 +23,123 @@ SLVM_IMPLEMENT_KERNEL_CLASS(Point, Object);
 /**
  * SmallInteger primitives
  */
-SLVM_Oop slvm_SmallInteger_primitive_asString(SLVM_PrimitiveContext *context)
+static SLVM_Oop slvm_SmallInteger_primitive_plus(SLVM_PrimitiveContext *context)
+{
+    SLVM_Oop argument;
+    SLVM_Oop result;
+    assert(context->oopArgumentCount == 1);
+
+    argument = context->oopArguments[0];
+    if(slvm_oopIsSmallInteger(argument))
+    {
+        result = slvm_makeInteger(slvm_decodeSmallInteger(context->receiver) + slvm_decodeSmallInteger(context->oopArguments[0]));
+    }
+    else if(slvm_oopIsSmallFloat(argument))
+    {
+        abort();
+    }
+    else
+    {
+        abort();
+    }
+
+    return result;
+}
+
+static SLVM_Oop slvm_SmallInteger_primitive_minus(SLVM_PrimitiveContext *context)
+{
+    SLVM_Oop argument;
+    SLVM_Oop result;
+    assert(context->oopArgumentCount == 1);
+
+    argument = context->oopArguments[0];
+    if(slvm_oopIsSmallInteger(argument))
+    {
+        result = slvm_makeInteger(slvm_decodeSmallInteger(context->receiver) - slvm_decodeSmallInteger(context->oopArguments[0]));
+    }
+    else if(slvm_oopIsSmallFloat(argument))
+    {
+        abort();
+    }
+    else
+    {
+        abort();
+    }
+
+    return result;
+}
+
+static SLVM_Oop slvm_SmallInteger_primitive_multiply(SLVM_PrimitiveContext *context)
+{
+    SLVM_Oop argument;
+    SLVM_Oop result;
+    assert(context->oopArgumentCount == 1);
+
+    argument = context->oopArguments[0];
+    if(slvm_oopIsSmallInteger(argument))
+    {
+        /*TODO: Perform proper overflow checks. */
+        result = slvm_makeInteger(slvm_decodeSmallInteger(context->receiver) * slvm_decodeSmallInteger(context->oopArguments[0]));
+    }
+    else if(slvm_oopIsSmallFloat(argument))
+    {
+        abort();
+    }
+    else
+    {
+        abort();
+    }
+
+    return result;
+}
+
+static SLVM_Oop slvm_SmallInteger_primitive_greaterThan(SLVM_PrimitiveContext *context)
+{
+    SLVM_Oop argument;
+    SLVM_Oop result;
+    assert(context->oopArgumentCount == 1);
+
+    argument = context->oopArguments[0];
+    if(slvm_oopIsSmallInteger(argument))
+    {
+        result = slvm_encodeBoolean(slvm_decodeSmallInteger(context->receiver) > slvm_decodeSmallInteger(context->oopArguments[0]));
+    }
+    else if(slvm_oopIsSmallFloat(argument))
+    {
+        abort();
+    }
+    else
+    {
+        abort();
+    }
+
+    return result;
+}
+
+static SLVM_Oop slvm_SmallInteger_primitive_lessThan(SLVM_PrimitiveContext *context)
+{
+    SLVM_Oop argument;
+    SLVM_Oop result;
+    assert(context->oopArgumentCount == 1);
+
+    argument = context->oopArguments[0];
+    if(slvm_oopIsSmallInteger(argument))
+    {
+        result = slvm_encodeBoolean(slvm_decodeSmallInteger(context->receiver) < slvm_decodeSmallInteger(context->oopArguments[0]));
+    }
+    else if(slvm_oopIsSmallFloat(argument))
+    {
+        abort();
+    }
+    else
+    {
+        abort();
+    }
+
+    return result;
+}
+
+static SLVM_Oop slvm_SmallInteger_primitive_asString(SLVM_PrimitiveContext *context)
 {
     SLVM_ByteString *result;
     char buffer[128];
@@ -49,5 +167,11 @@ SLVM_Association *slvm_Association_make(SLVM_Oop key, SLVM_Oop value)
 
 void slvm_internal_init_magnitude(void)
 {
+    SLVM_KCLASS_ADD_PRIMITIVE(SmallInteger, "+", plus);
+    SLVM_KCLASS_ADD_PRIMITIVE(SmallInteger, "-", minus);
+    SLVM_KCLASS_ADD_PRIMITIVE(SmallInteger, "*", multiply);
+
+    SLVM_KCLASS_ADD_PRIMITIVE(SmallInteger, ">", greaterThan);
+    SLVM_KCLASS_ADD_PRIMITIVE(SmallInteger, "<", lessThan);
     SLVM_KCLASS_ADD_PRIMITIVE(SmallInteger, "asString", asString);
 }
