@@ -1,7 +1,23 @@
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "slvm/dynrun.h"
+
+typedef struct
+{
+    void *framePointer;
+    void *returnPointer;
+} MessageReturnFrame;
+
+typedef struct
+{
+    uint16_t oopArgumentCount;
+    uint16_t nativeArgumentSize;
+    SLVM_Oop selector;
+    void *framePointer;
+    void *returnPointer;
+} MessageSmalltalkMetadata;
 
 typedef struct
 {
@@ -9,42 +25,111 @@ typedef struct
     void *returnPointer;
     uint16_t oopArgumentCount;
     uint16_t nativeArgumentSize;
-
     SLVM_Oop selector;
+} MessageCMetadata;
+
+typedef struct
+{
+    union
+    {
+        MessageSmalltalkMetadata smalltalk;
+        MessageCMetadata c;
+    };
+
     SLVM_Oop receiver;
     SLVM_Oop oopArguments[];
 } MessageSendRequiredArguments;
 
-typedef struct
+extern void _slvm_dynrun_returnToSender_trampoline(void *restoreStackPointer, void* returnValue);
+extern void _slvm_dynrun_returnToMethod_trampoline(void *restoreStackPointer, void* methodPointer);
+extern void _slvm_returnToC_trampoline(void);
+
+extern SLVM_Oop _slvm_dynrun_switch_to_smalltalk(void *stackSegment, void *entryPoint);
+
+extern void _slvm_dynrun_pop_stack_segment_trap(void);
+
+static void slvm_dynrun_returnToSmalltalkSender(MessageSendRequiredArguments *arguments, void* returnValue)
 {
-    void *framePointer;
-    void *returnPointer;
-} MessageSendResultStackFrame;
+    uint8_t *nativeArguments = (uint8_t*)&arguments->oopArguments[arguments->smalltalk.oopArgumentCount];
+    MessageReturnFrame *returnFrame = (MessageReturnFrame*)(nativeArguments + arguments->smalltalk.nativeArgumentSize - sizeof(MessageReturnFrame));
 
-extern void _slvm_dynrun_returnToSender_trap(void *restoreStackPointer, void* returnValue);
-extern void _slvm_dynrun_returnToMethod_trap(void *restoreStackPointer, void* methodPointer);
-extern SLVM_Oop _slvm_dynrun_smalltalk_sendWithArguments(void *entryPoint, uint32_t argumentDescription, SLVM_Oop receiver, SLVM_Oop *oopArguments, void *nativeArguments);
+    returnFrame->returnPointer = arguments->smalltalk.returnPointer;
+    returnFrame->framePointer = arguments->smalltalk.framePointer;
+    _slvm_dynrun_returnToSender_trampoline(&returnFrame->framePointer, returnValue);
+}
 
-/* Since the message send calling convention is different to C calling convention, we cannot just return. */
-void slvm_dynrun_returnToSender(void *stackPointer, void* returnValue)
+static void slvm_dynrun_convertSendMetadataToSmalltalkFromC(MessageCMetadata *source, MessageSmalltalkMetadata *dest)
 {
-    size_t totalArgumentsSize;
-    MessageSendRequiredArguments *requiredArguments;
-    MessageSendResultStackFrame *resultStackFrame;
+    puts("Convert C->Smalltalk");
+    dest->oopArgumentCount = source->oopArgumentCount;
+    dest->nativeArgumentSize = source->nativeArgumentSize;
+    dest->selector = source->selector;
+    dest->framePointer = source->framePointer;
+    dest->returnPointer = source->returnPointer;
+}
 
-    /* Compute the value that has to be cleaned. */
-    requiredArguments = (MessageSendRequiredArguments*)stackPointer;
-    totalArgumentsSize = sizeof(MessageSendRequiredArguments)
-        + requiredArguments->nativeArgumentSize
-        + requiredArguments->oopArgumentCount*sizeof(SLVM_Oop);
+void slvm_dynrun_new_stack_segment(uint8_t* currentStackHead, uint32_t argumentDescriptor)
+{
+    uint16_t nativeArgumentSize;
+    uint16_t oopArgumentCount;
+    size_t totalArgumentSize;
+    void *senderReturnPointer;
+    void **newSegmentPointers;
+    void **oldSegmentPointers;
+    SLVM_ExecutionStackSegmentHeader *newSegment;
+    SLVM_ExecutionStackSegmentHeader *currentSegment;
 
-    /* Move the return pointer up in the stack. */
-    resultStackFrame = (MessageSendResultStackFrame*) ((uint8_t*)stackPointer + totalArgumentsSize - sizeof(MessageSendResultStackFrame));
-    resultStackFrame->framePointer = requiredArguments->framePointer;
-    resultStackFrame->returnPointer = requiredArguments->returnPointer;
+    /* Compute the totalargument size that has to be copied. */
+    nativeArgumentSize = argumentDescriptor >> 16;
+    oopArgumentCount = argumentDescriptor & 0xFFFF;
+    totalArgumentSize = nativeArgumentSize + (oopArgumentCount + /*Receiver */ 1 + /* Return pointers */ 2) * sizeof(void*);
 
-    /* Set the return value and restore the stack. */
-    _slvm_dynrun_returnToSender_trap(resultStackFrame, returnValue);
+    /* Get the current segment. */
+    currentSegment = (SLVM_ExecutionStackSegmentHeader*) (currentStackHead - sizeof(SLVM_ExecutionStackSegmentHeader));
+
+    /* Allocate the new segment */
+    newSegment = slvm_ExecutionStack_createNewSegment();
+    newSegment->stackPointer -= totalArgumentSize;
+
+    /* Copy the arguments and the return pointers. */
+    memcpy(newSegment->stackPointer, currentSegment->stackPointer, totalArgumentSize);
+
+    /* Fix the return pointers. */
+    newSegment->stackPointer -= sizeof(void*);
+    newSegmentPointers = (void**)newSegment->stackPointer;
+    senderReturnPointer = newSegmentPointers[2];
+    newSegmentPointers[2] = &_slvm_dynrun_pop_stack_segment_trap;
+    newSegmentPointers[0] = newSegment->framePointer;
+
+    /* Fix the old segment for returning. */
+    currentSegment->stackPointer += totalArgumentSize - sizeof(void*)*2;
+    oldSegmentPointers = (void**)currentSegment->stackPointer;
+    oldSegmentPointers[0] = currentSegment->framePointer;
+    oldSegmentPointers[1] = senderReturnPointer;
+
+    /* Return to the new segment. */
+    /*puts("Move to new segment");*/
+    _slvm_dynrun_returnToSender_trampoline(newSegment->stackPointer, 0);
+}
+
+void slvm_dynrun_pop_stack_segment(uint8_t* currentStackHead, void *returnValue)
+{
+    SLVM_ExecutionStackSegmentHeader *previousSegment;
+    SLVM_ExecutionStackSegmentHeader *currentSegment;
+
+    /* Get the current segment. */
+    currentSegment = (SLVM_ExecutionStackSegmentHeader*) (currentStackHead - sizeof(SLVM_ExecutionStackSegmentHeader));
+
+    /* Get the previous segment. */
+    assert(currentSegment->header.previous);
+    previousSegment = (SLVM_ExecutionStackSegmentHeader*) ((uint8_t*)currentSegment->header.previous + sizeof(SLVM_LinkedListNode) - sizeof(SLVM_ExecutionStackSegmentHeader));
+
+    /* Pop the old segment. */
+    slvm_ExecutionStack_popSegment(currentSegment);
+
+    /* Return to the sender. */
+    /*puts("Move to older segment");*/
+    _slvm_dynrun_returnToSender_trampoline(previousSegment->stackPointer, returnValue);
 }
 
 void* slvm_dynrun_send_dispatch(int senderCallingConvention, void *stackPointer)
@@ -55,15 +140,28 @@ void* slvm_dynrun_send_dispatch(int senderCallingConvention, void *stackPointer)
     SLVM_Behavior *behavior;
     SLVM_CompiledMethod *compiledMethod;
     SLVM_PrimitiveMethod *primitiveMethod;
+    SLVM_ExecutionStackSegmentHeader *stackSegment;
     unsigned int targetCallingConvention;
     unsigned int methodClass;
+    unsigned int totalArgumentSize;
+    int isStackFrameThreadBase;
+    MessageSmalltalkMetadata smalltalkConverted;
 
     MessageSendRequiredArguments *requiredArguments = (MessageSendRequiredArguments*)stackPointer;
+    MessageSmalltalkMetadata *smalltalk = &requiredArguments->smalltalk;
 
-    /*
-    printf("Send[%p] dispatch to %p: %p %d %d: ", (void*)requiredArguments->selector, (void*)requiredArguments->receiver, stackPointer, requiredArguments->oopArgumentCount, requiredArguments->nativeArgumentSize);
-    slvm_String_printLine((SLVM_String*)requiredArguments->selector);
-    */
+    /* Convert the sending metadata layout to the Smalltalk convention. */
+    if(senderCallingConvention == SLVM_CC_CDecl)
+    {
+        slvm_dynrun_convertSendMetadataToSmalltalkFromC(&requiredArguments->c, &smalltalkConverted);
+        smalltalk = &smalltalkConverted;
+    }
+
+    /*puts("Send entered");
+    printf("Send[%p] dispatch to %p: %p %d %d: ", (void*)smalltalk.selector, (void*)requiredArguments->receiver, stackPointer, smalltalk.oopArgumentCount, smalltalk.nativeArgumentSize);
+    slvm_String_printLine((SLVM_String*)smalltalk.selector);
+    if(smalltalk.oopArgumentCount)
+        printf("Arg 0: %p\n", (void*)requiredArguments->oopArguments[0]);*/
 
     /* Get the receiver class. */
     behavior = slvm_getClassFromOop(requiredArguments->receiver);
@@ -74,11 +172,11 @@ void* slvm_dynrun_send_dispatch(int senderCallingConvention, void *stackPointer)
     }
 
     /* Look up the method. */
-    method = slvm_Behavior_lookup(behavior, requiredArguments->selector);
+    method = slvm_Behavior_lookup(behavior, smalltalk->selector);
     if(slvm_isNil(method))
     {
         printf("TODO: Send does not understand.\nSelector: ");
-        slvm_String_printLine((SLVM_String*)requiredArguments->selector);
+        slvm_String_printLine((SLVM_String*)smalltalk->selector);
     }
     else
     {
@@ -96,13 +194,14 @@ void* slvm_dynrun_send_dispatch(int senderCallingConvention, void *stackPointer)
                 if(targetCallingConvention == SLVM_CC_Smalltalk)
                 {
                     /* Adjust the stack pointer and jump to the called method */
-                    _slvm_dynrun_returnToMethod_trap(stackPointer, (void*)(compiledMethod->entryPoint - 1));
+                    _slvm_dynrun_returnToMethod_trampoline(&smalltalk->framePointer, (void*)(compiledMethod->entryPoint - 1));
                     printf("_slvm_dynrun_returnToMethod_trap should not have returned.\n");
                     abort();
                 }
                 else
                 {
                     printf("TODO: Send from Smalltalk stack to C stack\n");
+                    /* We need to change back to the C stack. */
                 }
             }
             else if(senderCallingConvention == SLVM_CC_CDecl)
@@ -110,18 +209,33 @@ void* slvm_dynrun_send_dispatch(int senderCallingConvention, void *stackPointer)
                 if(targetCallingConvention == SLVM_CC_CDecl)
                 {
                     /* Adjust the stack pointer and jump to the called method */
-                    _slvm_dynrun_returnToMethod_trap(stackPointer, (void*)(compiledMethod->entryPoint - 1));
+                    _slvm_dynrun_returnToMethod_trampoline(&requiredArguments->c.framePointer, (void*)(compiledMethod->entryPoint - 1));
                     printf("_slvm_dynrun_returnToMethod_trap should not have returned.\n");
                     abort();
                 }
                 else if(targetCallingConvention == SLVM_CC_Smalltalk)
                 {
+                    /* We need to change the stack */
+                    stackSegment = slvm_ExecutionStack_getValidSegment();
+                    printf("Stack segment %p\n", stackSegment);
+
+                    isStackFrameThreadBase = stackSegment->stackPointer == (void*)stackSegment->threadData;
+
+                    /* Copy the arguments. */
+                    totalArgumentSize = (smalltalk->oopArgumentCount + 1) * sizeof(SLVM_Oop) + smalltalk->nativeArgumentSize;
+                    totalArgumentSize = (totalArgumentSize + 15) & (-16); /* 16 Byte Alignment */
+                    stackSegment->stackPointer -= totalArgumentSize;
+                    memcpy(stackSegment->stackPointer, &requiredArguments->receiver, totalArgumentSize);
+
+                    /* Store the backward trampoline pointer. */
+                    stackSegment->stackPointer -= 4;
+                    *((void**)stackSegment->stackPointer) = &_slvm_returnToC_trampoline;
+
                     /* Push again the arguments in the stack. */
-                    result = _slvm_dynrun_smalltalk_sendWithArguments(
-                        (void*) (compiledMethod->entryPoint - 1),
-                        requiredArguments->oopArgumentCount | (requiredArguments->nativeArgumentSize << 16),
-                        requiredArguments->receiver, requiredArguments->oopArguments,
-                        &requiredArguments->oopArguments[requiredArguments->oopArgumentCount]);
+                    result = _slvm_dynrun_switch_to_smalltalk(&stackSegment[1], (void*) (compiledMethod->entryPoint - 1));
+                    if(isStackFrameThreadBase)
+                        slvm_ExecutionStack_popSegment(stackSegment);
+
                     return (void*) result;
                 }
             }
@@ -137,9 +251,9 @@ void* slvm_dynrun_send_dispatch(int senderCallingConvention, void *stackPointer)
             SLVM_PrimitiveContext context = {
                 .errorCode = SLVM_PrimitiveError_Success,
                 .stackPointer = stackPointer,
-                .selector = requiredArguments->selector, .receiver = requiredArguments->receiver,
-                .oopArgumentCount = requiredArguments->oopArgumentCount, .oopArguments = requiredArguments->oopArguments,
-                .nativeArgumentSize = requiredArguments->nativeArgumentSize, .nativeArguments = &requiredArguments->oopArguments[requiredArguments->oopArgumentCount]
+                .selector = smalltalk->selector, .receiver = requiredArguments->receiver,
+                .oopArgumentCount = smalltalk->oopArgumentCount, .oopArguments = requiredArguments->oopArguments,
+                .nativeArgumentSize = smalltalk->nativeArgumentSize, .nativeArguments = &requiredArguments->oopArguments[smalltalk->oopArgumentCount]
             };
 
             /* Call the primitive. */
@@ -150,14 +264,14 @@ void* slvm_dynrun_send_dispatch(int senderCallingConvention, void *stackPointer)
             if(context.errorCode != SLVM_PrimitiveError_Success)
             {
                 fprintf(stderr, "Primitive without fallback context failed! Aborting.");
-                slvm_String_printLine((SLVM_String*)requiredArguments->selector);
+                slvm_String_printLine((SLVM_String*)smalltalk->selector);
                 abort();
             }
 
             /* Return adjusting for the caller convention. */
             if(senderCallingConvention == SLVM_CC_Smalltalk)
             {
-                slvm_dynrun_returnToSender(stackPointer, (void*)result);
+                slvm_dynrun_returnToSmalltalkSender(requiredArguments, (void*)result);
                 printf("Primitive return to smalltalk return should not be reached\n");
                 abort();
             }

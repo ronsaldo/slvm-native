@@ -142,8 +142,8 @@ static SLVM_Oop slvm_SmallInteger_primitive_lessThan(SLVM_PrimitiveContext *cont
 static SLVM_Oop slvm_SmallInteger_primitive_asString(SLVM_PrimitiveContext *context)
 {
     SLVM_ByteString *result;
-    char buffer[128];
-    sprintf(buffer, "%lld", (long long)slvm_decodeSmallInteger(context->receiver));
+    char buffer[64];
+    snprintf(buffer, sizeof(buffer) - 1, "%lld", (long long)slvm_decodeSmallInteger(context->receiver));
 
     result = slvm_String_convertCString(buffer);
     return (SLVM_Oop)result;

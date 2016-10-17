@@ -25,6 +25,9 @@ void slvm_dynrun_initialize(void)
 #error TODO: implement myself
 #endif
 
+    /* Initialize the execution stack. */
+    slvm_ExecutionStack_initialize();
+
     /* Initialize the kernel */
     slvm_internal_init_collections_kernel();
     slvm_internal_init_classes();

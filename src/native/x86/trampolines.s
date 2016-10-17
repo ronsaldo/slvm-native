@@ -1,43 +1,123 @@
 .section .text
 
 # Send trampoline
-.global _slvm_dynrun_send_trap
+.global _slvm_dynrun_send_trampoline
 .global slvm_dynrun_send_dispatch
-_slvm_dynrun_send_trap:
+_slvm_dynrun_send_trampoline:
     push %ebp
     movl %esp, %ebp
 
-    push %esp
+    push %eax # Selector
+    push %ecx # Argument description
+
+    # Store the stack pointer
+    movl %esp, %eax
+
+    # Fetch the stack segment pointer
+    movl %esp, %ebx
+    andl $-4096, %ebx
+    addl $4096, %ebx
+
+    # Fetch the thread data
+    movl -24(%ebx), %ecx
+
+    # Store the smalltalk stack pointers.
+    movl %esp, -12(%ebx)
+    movl %ebp, -16(%ebx)
+
+    # Restore the C stack
+    movl 0(%ecx), %esp
+    movl 4(%ecx), %ebp
+
+    # Pass the smalltalk stack pointer
+    push %eax
     push $0
     call slvm_dynrun_send_dispatch
+    hlt
 
-    movl %ebp, %esp
-    popl %ebp
-    ret
+
+# _slvm_dynrun_stack_limit_trap
+.global _slvm_dynrun_stack_limit_trap
+.global slvm_dynrun_new_stack_segment
+_slvm_dynrun_stack_limit_trap:
+    # Fetch the stack segment pointer
+    movl %esp, %ebx
+    andl $-4096, %ebx
+    addl $4096, %ebx
+
+    # Fetch the thread data
+    movl -24(%ebx), %ecx
+
+    # Store the smalltalk stack pointers.
+    movl %esp, -12(%ebx)
+    movl %ebp, -16(%ebx)
+
+    # Restore the C stack
+    movl 0(%ecx), %esp
+    movl 4(%ecx), %ebp
+
+    # Pass some arguments
+    pushl %eax
+    pushl %ebx
+
+    # Call C function for creating a new stack segment.
+    call slvm_dynrun_new_stack_segment
+    hlt
+
+.global _slvm_dynrun_pop_stack_segment
+.global _slvm_dynrun_pop_stack_segment_trap
+_slvm_dynrun_pop_stack_segment_trap:
+    # Fetch the stack segment pointer
+    movl %esp, %ebx
+    andl $-4096, %ebx
+    addl $4096, %ebx
+
+    # Fetch the thread data
+    movl -24(%ebx), %ecx
+
+    # Store the smalltalk stack pointers.
+    movl %esp, -12(%ebx)
+    movl %ebp, -16(%ebx)
+
+    # Restore the C stack
+    movl 0(%ecx), %esp
+    movl 4(%ecx), %ebp
+
+    # Pass some arguments
+    pushl %eax
+    pushl %ebx
+    call slvm_dynrun_pop_stack_segment
 
 .global slvm_dynrun_csend
 slvm_dynrun_csend:
-    push %ebp
+    pushl %ebp
     movl %esp, %ebp
 
     push %esp
     push $1
     call slvm_dynrun_send_dispatch
+    addl $8, %esp
 
     movl %ebp, %esp
     popl %ebp
     ret
 
-.global _slvm_dynrun_returnToSender_trap
-_slvm_dynrun_returnToSender_trap:
+# (4) restoreStackPointer, (8)result
+.global _slvm_dynrun_returnToSender_trampoline
+_slvm_dynrun_returnToSender_trampoline:
+    # Store the result in EAX
     movl 8(%esp), %eax
+
+    # Restore the stack frame.
     movl 4(%esp), %esp
     popl %ebp
+
+    # Return
     ret
 
 # (4) restoreStackPointer, (8)methodPointer
-.global _slvm_dynrun_returnToMethod_trap
-_slvm_dynrun_returnToMethod_trap:
+.global _slvm_dynrun_returnToMethod_trampoline
+_slvm_dynrun_returnToMethod_trampoline:
     # Store the method pointer in EAX
     movl 8(%esp), %eax
 
@@ -45,65 +125,87 @@ _slvm_dynrun_returnToMethod_trap:
     movl 4(%esp), %esp
     popl %ebp
 
-    # Put the method pointer below the return pointer position.
-    # Argument description point.
-    movl %eax, 4(%esp)
+    # Jump to the method
+    jmp *%eax
 
-    # Move the return pointer to where the selector is located.
-    popl %eax
-    movl %eax, 4(%esp)
+.global _slvm_dynrun_switch_to_smalltalk
 
-    # Return to the method.
-    ret
+# Stack segment header
+# (-8) header;
+# (-12) stackPointer;
+# (-16) framePointer;
+# (-20) linkPointer;
+# (-24) threadData;
+# (-28) segmentSize;
+# (-32) reserved;
 
-.global _slvm_dynrun_smalltalk_sendWithArguments
-# (8) entryPoint, (12) argumentDescription [12 oopCount, 14 nativeCount], (16)SLVM_Oop receiver, (20) oopArguments, (24)nativeArguments
-_slvm_dynrun_smalltalk_sendWithArguments:
+# (8) stackSegment (12) entryPoint
+_slvm_dynrun_switch_to_smalltalk:
+# (SLVM_ExecutionStackSegmentHeader *stackSegment, SLVM_ThreadStackData *threadData, void *entryPoint);
     pushl %ebp
     movl %esp, %ebp
-    pushl %esi
+
+    pushl %ebx
     pushl %edi
-    pushl %ecx
+    pushl %esi
 
-    # Align the stack.
-    andl $-16, %esp
+    movl 8(%ebp), %ebx
+    movl 12(%ebp), %eax
 
-    # Reserve the native space
-    movzxw 14(%ebp), %ecx
-    subl %ecx, %esp
+    # Fetch the thread data pointer
+    movl -24(%ebx), %ecx
 
-    # Copy the native arguments.
-    cld
-    shrl $2, %ecx
-    movl 24(%ebp), %esi
-    movl %esp, %edi
-    rep movsl
+    # Store the old C pointers
+    pushl 8(%ecx)
+    pushl 4(%ecx)
+    pushl 0(%ecx)
 
-    # Reserve the oop space
-    movzxw 12(%ebp), %ecx
-    movl %ecx, %eax
+    # Store the C pointers
+    movl %esp, 0(%ecx)
+    movl %ebp, 4(%ecx)
+    movl $.LbackToCReturnPointer, 8(%ecx)
 
-    #andl $-16, %esp
-    shll $2, %eax
-    subl %eax, %esp
+    # Switch to the smalltalk stack.
+    movl -12(%ebx), %esp
+    movl -16(%ebx), %ebp
 
-    # Copy the oop arguments
-    cld
-    movl 20(%ebp), %esi
-    movl %esp, %edi
-    rep movsl
+    # Jump to the function
+    jmp *%eax
 
-    # Push the receiver
-    pushl 16(%ebp)
+.LbackToCReturnPointer:
+    # Restore the old C pointers
+    popl 0(%ecx)
+    popl 4(%ecx)
+    popl 8(%ecx)
 
-    # Call the method.
-    movl 8(%ebp), %eax
-    call *%eax
-
-    movl %ebp, %esp
-    sub $12, %esp
-    popl %ecx
+    # Restore the saved registers and return
     popl %esi
     popl %edi
+    popl %ebx
+
+    movl %ebp, %esp
     popl %ebp
+    ret
+
+.global _slvm_returnToC_trampoline
+_slvm_returnToC_trampoline:
+
+    # Fetch the stack segment pointer
+    movl %esp, %ebx
+    andl $-4096, %ebx
+    addl $4096, %ebx
+
+    # Fetch the thread data
+    movl -24(%ebx), %ecx
+
+    # Store the smalltalk stack pointers.
+    movl %esp, -12(%ebx)
+    movl %ebp, -16(%ebx)
+
+    # Restore the C stack
+    movl 0(%ecx), %esp
+    movl 4(%ecx), %ebp
+
+    # Return to C
+    pushl 8(%ecx)
     ret
