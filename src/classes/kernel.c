@@ -97,7 +97,7 @@ SLVM_Oop slvm_globals_atOrNil(SLVM_Oop symbol)
 
 void slvm_globals_atPut(SLVM_Oop symbol, SLVM_Oop value)
 {
-    slvm_IdentityDictionary_atPut((SLVM_IdentityDictionary*)kernelRoots.globals, symbol, value);
+    slvm_SystemDictionary_atPut(kernelRoots.globals, symbol, value);
 }
 
 /**
@@ -118,7 +118,7 @@ void slvm_internal_init_classes(void)
     SLVM_KCLASS(className)->classPool = (SLVM_Oop)slvm_Dictionary_new(SLVM_KCLASS(Dictionary)); \
     SLVM_KCLASS(className)->environment = (SLVM_Oop)kernelRoots.globals; \
     SLVM_KCLASS(className)->_base_._base_.methodDict = slvm_MethodDictionary_new(); \
-    slvm_IdentityDictionary_atPut((SLVM_IdentityDictionary*)kernelRoots.globals, (SLVM_Oop)(SLVM_KCLASS(className)->name), (SLVM_Oop)SLVM_KCLASS(className));
+    slvm_globals_atPut((SLVM_Oop)(SLVM_KCLASS(className)->name), (SLVM_Oop)SLVM_KCLASS(className));
 
     #include "slvm/classes/compactIndices.inc"
 
@@ -129,11 +129,11 @@ void slvm_internal_init_classes(void)
 /**
  * Package registration methods.
  */
-extern SLVM_Oop slvm_dynrun_subclassWithNames(SLVM_Oop superClassName,
+extern SLVM_Oop slvm_dynrun_subclassWithSomeNames(SLVM_Oop superClassName,
         SLVM_Oop name,
         SLVM_Oop instanceVariableNames, SLVM_Oop format,
         SLVM_Oop metaInstanceVariableNames, SLVM_Oop metaFormat,
-        SLVM_Oop classVariablesNames, SLVM_Oop poolDictionaries,
+        SLVM_Oop classVariableAssociations, SLVM_Oop poolDictionaries,
         SLVM_Oop categoryName)
 {
     SLVM_Oop existing;
@@ -201,7 +201,7 @@ extern SLVM_Oop slvm_dynrun_subclassWithNames(SLVM_Oop superClassName,
     metaClass->thisClass = clazz;
 
     /* Register the class in the system dictionary. */
-    slvm_IdentityDictionary_atPut((SLVM_IdentityDictionary*)kernelRoots.globals, clazz->name, (SLVM_Oop)clazz);
+    slvm_globals_atPut(clazz->name, (SLVM_Oop)clazz);
     return (SLVM_Oop)metaClass;
 }
 

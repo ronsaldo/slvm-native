@@ -328,12 +328,6 @@ SLVM_Dictionary *slvm_Dictionary_newWithCapacity(SLVM_Class *clazz, size_t n)
     return result;
 }
 
-SLVM_SystemDictionary *slvm_SystemDictionary_new()
-{
-    SLVM_SystemDictionary *result = (SLVM_SystemDictionary*)slvm_Dictionary_new(SLVM_KCLASS(SystemDictionary));
-    return result;
-}
-
 /**
  * Identity dictionary
  */
@@ -434,7 +428,7 @@ void slvm_IdentityDictionary_addAssociation(SLVM_IdentityDictionary *dictionary,
     }
 }
 
-void slvm_IdentityDictionary_atPut(SLVM_IdentityDictionary *dictionary, SLVM_Oop key, SLVM_Oop value)
+void slvm_IdentityDictionary_atPutWithAssociationClass(SLVM_IdentityDictionary *dictionary, SLVM_Oop key, SLVM_Oop value, SLVM_Class *associationClass)
 {
     SLVM_Array *array;
     SLVM_Association *element;
@@ -451,7 +445,7 @@ void slvm_IdentityDictionary_atPut(SLVM_IdentityDictionary *dictionary, SLVM_Oop
     element = (SLVM_Association*)array->data[index];
     if(slvm_isNil(element))
     {
-        array->data[index] = (SLVM_Oop)slvm_Association_make(key, value);
+        array->data[index] = (SLVM_Oop)slvm_Association_makeWithClass(associationClass, key, value);
 
         /* Increase the dictionary size. */
         dictionary->tally += slvm_encodeSmallIntegerOffset(1);
@@ -462,6 +456,11 @@ void slvm_IdentityDictionary_atPut(SLVM_IdentityDictionary *dictionary, SLVM_Oop
     {
         element->value = value;
     }
+}
+
+void slvm_IdentityDictionary_atPut(SLVM_IdentityDictionary *dictionary, SLVM_Oop key, SLVM_Oop value)
+{
+    slvm_IdentityDictionary_atPutWithAssociationClass(dictionary, key, value, SLVM_KCLASS(Association));
 }
 
 SLVM_Oop slvm_IdentityDictionary_atOrNil(SLVM_IdentityDictionary *dictionary, SLVM_Oop key)
@@ -480,6 +479,21 @@ SLVM_Oop slvm_IdentityDictionary_atOrNil(SLVM_IdentityDictionary *dictionary, SL
     if(slvm_isNil(element))
         return slvm_nilOop;
     return element->value;
+}
+
+/**
+ * SystemDictionary
+ */
+SLVM_SystemDictionary *slvm_SystemDictionary_new()
+{
+    SLVM_SystemDictionary *result = (SLVM_SystemDictionary*)slvm_Dictionary_new(SLVM_KCLASS(SystemDictionary));
+    return result;
+}
+
+
+void slvm_SystemDictionary_atPut(SLVM_SystemDictionary *dictionary, SLVM_Oop key, SLVM_Oop value)
+{
+    slvm_IdentityDictionary_atPutWithAssociationClass((SLVM_IdentityDictionary*)dictionary, key, value, SLVM_KCLASS(GlobalVariable));
 }
 
 /**

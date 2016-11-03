@@ -156,7 +156,7 @@ typedef struct SLVM_Behavior_ SLVM_Behavior;
 #define slvm_encodeSmallIntegerOffset(value) (value << SLVM_SPUR_SMALLINTEGER_TAG_BITS)
 
 #define slvm_encodeSmallInteger(value) ((value << SLVM_SPUR_SMALLINTEGER_TAG_BITS) | SLVM_SPUR_SMALLINTEGER_TAG_VALUE)
-#define slvm_decodeSmallInteger(oop) (oop >> SLVM_SPUR_SMALLINTEGER_TAG_BITS)
+#define slvm_decodeSmallInteger(oop) (((SLVM_SOop)(oop)) >> SLVM_SPUR_SMALLINTEGER_TAG_BITS)
 
 #define slvm_getClassIndexFromOop(oop) (slvm_oopIsPointers(oop) ? ((SLVM_ObjectHeader*)(oop))->classIndex : ((oop) & SLVM_SPUR_TAG_MASK))
 #define slvm_getClassFromOop(oop) slvm_classTable[slvm_getClassIndexFromOop(oop) >> 12][slvm_getClassIndexFromOop(oop) & 1023]

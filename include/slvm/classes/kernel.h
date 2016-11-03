@@ -220,11 +220,11 @@ SLVM_IMPLEMENT_KERNEL_CLASS_EXPLICIT_FORMAT(className, superClassName, \
 /**
  * Class and method registration.
  */
-extern SLVM_Oop slvm_dynrun_subclassWithNames(SLVM_Oop superClassName,
+extern SLVM_Oop slvm_dynrun_subclassWithSomeNames(SLVM_Oop superClassName,
         SLVM_Oop name,
         SLVM_Oop instanceVariableNames, SLVM_Oop format,
         SLVM_Oop metaInstanceVariableNames, SLVM_Oop metaFormat,
-        SLVM_Oop classVariablesNames, SLVM_Oop poolDictionaries,
+        SLVM_Oop classVariableAssociations, SLVM_Oop poolDictionaries,
         SLVM_Oop categoryName);
 extern SLVM_Oop slvm_dynrun_registerMethodWithNames(SLVM_Oop method, SLVM_Oop selector, SLVM_Oop className, SLVM_Oop classSide);
 

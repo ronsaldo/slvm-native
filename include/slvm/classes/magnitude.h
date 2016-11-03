@@ -20,6 +20,10 @@ typedef SLVM_Object SLVM_Magnitude;
         typedef SLVM_SOop SLVM_SmallInteger;
     typedef struct SLVM_LookupKey_ SLVM_LookupKey;
         typedef struct SLVM_Association_ SLVM_Association;
+            typedef SLVM_Association SLVM_LiteralVariable;
+                typedef SLVM_LiteralVariable SLVM_ClassVariable;
+                typedef SLVM_LiteralVariable SLVM_GlobalVariable;
+                typedef SLVM_LiteralVariable SLVM_WorkspaceVariable;
 typedef struct SLVM_Point_ SLVM_Point;
 
 /**
@@ -94,12 +98,20 @@ SLVM_DECLARE_KERNEL_CLASS(Magnitude);
             SLVM_DECLARE_KERNEL_CLASS(SmallInteger);
     SLVM_DECLARE_KERNEL_CLASS(LookupKey);
         SLVM_DECLARE_KERNEL_CLASS(Association);
+            SLVM_DECLARE_KERNEL_CLASS(LiteralVariable);
+                SLVM_DECLARE_KERNEL_CLASS(ClassVariable);
+                SLVM_DECLARE_KERNEL_CLASS(GlobalVariable);
+                SLVM_DECLARE_KERNEL_CLASS(WorkspaceVariable);
 SLVM_DECLARE_KERNEL_CLASS(Point);
 
 /**
  * Association
  */
+SLVM_Association *slvm_Association_newWithClass(SLVM_Class *clazz);
+SLVM_Association *slvm_Association_makeWithClass(SLVM_Class *clazz, SLVM_Oop key, SLVM_Oop value);
+
 SLVM_Association *slvm_Association_new();
 SLVM_Association *slvm_Association_make(SLVM_Oop key, SLVM_Oop value);
+
 
 #endif /* SLVM_CLASSES_MAGNITUDE_H */

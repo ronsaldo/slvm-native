@@ -15,8 +15,12 @@ SLVM_IMPLEMENT_KERNEL_CLASS(Magnitude, Object);
                 SLVM_IMPLEMENT_KERNEL_CLASS_EXPLICIT_FORMAT(LargeNegativeInteger, LargeInteger, OF_INDEXABLE_8, 0);
                 SLVM_IMPLEMENT_KERNEL_CLASS_EXPLICIT_FORMAT(LargePositiveInteger, LargeInteger, OF_INDEXABLE_8, 0);
             SLVM_IMPLEMENT_KERNEL_CLASS(SmallInteger, Integer);
-    SLVM_IMPLEMENT_KERNEL_CLASS(LookupKey, Number);
+    SLVM_IMPLEMENT_KERNEL_CLASS(LookupKey, Magnitude);
         SLVM_IMPLEMENT_KERNEL_CLASS(Association, LookupKey);
+            SLVM_IMPLEMENT_KERNEL_CLASS(LiteralVariable, Association);
+                SLVM_IMPLEMENT_KERNEL_CLASS(ClassVariable, LiteralVariable);
+                SLVM_IMPLEMENT_KERNEL_CLASS(GlobalVariable, LiteralVariable);
+                SLVM_IMPLEMENT_KERNEL_CLASS(WorkspaceVariable, LiteralVariable);
 
 SLVM_IMPLEMENT_KERNEL_CLASS(Point, Object);
 
@@ -152,17 +156,27 @@ static SLVM_Oop slvm_SmallInteger_primitive_asString(SLVM_PrimitiveContext *cont
 /**
  * Association
  */
-SLVM_Association *slvm_Association_new()
+SLVM_Association *slvm_Association_newWithClass(SLVM_Class *clazz)
 {
-    return SLVM_KNEW(Association, 0);
+    return (SLVM_Association *)slvm_Behavior_basicNew((SLVM_Behavior*)clazz, 0);
 }
 
-SLVM_Association *slvm_Association_make(SLVM_Oop key, SLVM_Oop value)
+SLVM_Association *slvm_Association_makeWithClass(SLVM_Class *clazz, SLVM_Oop key, SLVM_Oop value)
 {
     SLVM_Association *result = slvm_Association_new();
     result->_base_.key = key;
     result->value = value;
     return result;
+}
+
+SLVM_Association *slvm_Association_new()
+{
+    return slvm_Association_newWithClass(SLVM_KCLASS(Association));
+}
+
+SLVM_Association *slvm_Association_make(SLVM_Oop key, SLVM_Oop value)
+{
+    return slvm_Association_makeWithClass(SLVM_KCLASS(Association), key, value);
 }
 
 void slvm_internal_init_magnitude(void)
