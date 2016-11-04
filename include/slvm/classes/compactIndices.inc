@@ -83,3 +83,5 @@ COMPACT_CLASS_INDEX(LiteralVariable, 192)
 COMPACT_CLASS_INDEX(ClassVariable, 193)
 COMPACT_CLASS_INDEX(GlobalVariable, 194)
 COMPACT_CLASS_INDEX(WorkspaceVariable, 195)
+
+COMPACT_CLASS_INDEX(FullBlockClosure, 196)

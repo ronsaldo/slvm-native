@@ -268,6 +268,14 @@ static SLVM_Oop slvm_ProtoObject_primitive_class(SLVM_PrimitiveContext *context)
 }
 
 /**
+ * Object
+ */
+ static SLVM_Oop slvm_Object_primitive_value(SLVM_PrimitiveContext *context)
+ {
+     return context->receiver;
+ }
+
+/**
  * Behavior primitives
  */
 static SLVM_Oop slvm_Behavior_primitive_basicNew(SLVM_PrimitiveContext *context)
@@ -298,6 +306,9 @@ void slvm_internal_init_kernel(void)
     SLVM_KCLASS_ADD_PRIMITIVE(ProtoObject, "asString", asString);
     SLVM_KCLASS_ADD_PRIMITIVE(ProtoObject, "class", class);
     SLVM_KCLASS_ADD_PRIMITIVE(ProtoObject, "basicSize", basicSize);
+
+    /* Value */
+    SLVM_KCLASS_ADD_PRIMITIVE(Object, "value", value);
 
     /* Behavior */
     SLVM_KCLASS_ADD_PRIMITIVE(Behavior, "basicNew", basicNew);

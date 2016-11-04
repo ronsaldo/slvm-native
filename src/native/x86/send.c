@@ -40,6 +40,13 @@ typedef struct
     SLVM_Oop oopArguments[];
 } MessageSendRequiredArguments;
 
+typedef struct
+{
+    void *framePointer;
+    void *returnPointer;
+    intptr_t arguments[];
+} RuntimePrimitiveArguments;
+
 extern void _slvm_dynrun_returnToSender_trampoline(void *restoreStackPointer, void* returnValue);
 extern void _slvm_dynrun_returnToMethod_trampoline(void *restoreStackPointer, void* methodPointer);
 extern void _slvm_returnToC_trampoline(void);
@@ -58,9 +65,17 @@ static void slvm_dynrun_returnToSmalltalkSender(MessageSendRequiredArguments *ar
     _slvm_dynrun_returnToSender_trampoline(&returnFrame->framePointer, returnValue);
 }
 
+#define SLVM_RUNTIME_PRIMITIVE(name) void slvm_dynrun_primitive_ ## name(RuntimePrimitiveArguments *_stackPointer)
+#define SLVM_RUNTIME_PRIMITIVE_ARG(type, index) ((type*)(_stackPointer->arguments + (index)))
+#define SLVM_RUNTIME_PRIMITIVE_RETURN(popCount, returnValue) { \
+    MessageReturnFrame *_returnFrame = (MessageReturnFrame*)(((uint8_t*)&_stackPointer->arguments[((popCount) + 3) & (-4)]) - sizeof(MessageReturnFrame)); \
+    _returnFrame->returnPointer = _stackPointer->returnPointer; \
+    _returnFrame->framePointer = _stackPointer->framePointer; \
+    _slvm_dynrun_returnToSender_trampoline(&_returnFrame->framePointer, (void*)(returnValue)); \
+}
+
 static void slvm_dynrun_convertSendMetadataToSmalltalkFromC(MessageCMetadata *source, MessageSmalltalkMetadata *dest)
 {
-    puts("Convert C->Smalltalk");
     dest->oopArgumentCount = source->oopArgumentCount;
     dest->nativeArgumentSize = source->nativeArgumentSize;
     dest->selector = source->selector;
@@ -132,12 +147,10 @@ void slvm_dynrun_pop_stack_segment(uint8_t* currentStackHead, void *returnValue)
     _slvm_dynrun_returnToSender_trampoline(previousSegment->stackPointer, returnValue);
 }
 
-void* slvm_dynrun_send_dispatch(int senderCallingConvention, void *stackPointer)
+static void* slvm_dynrun_send_activateMethod(int senderCallingConvention, void *stackPointer, SLVM_Oop method)
 {
-    SLVM_Oop method;
     SLVM_Oop result;
     SLVM_ObjectHeader *methodHeader;
-    SLVM_Behavior *behavior;
     SLVM_CompiledMethod *compiledMethod;
     SLVM_PrimitiveMethod *primitiveMethod;
     SLVM_ExecutionStackSegmentHeader *stackSegment;
@@ -157,25 +170,9 @@ void* slvm_dynrun_send_dispatch(int senderCallingConvention, void *stackPointer)
         smalltalk = &smalltalkConverted;
     }
 
-    /*puts("Send entered");
-    printf("Send[%p] dispatch to %p: %p %d %d: ", (void*)smalltalk.selector, (void*)requiredArguments->receiver, stackPointer, smalltalk.oopArgumentCount, smalltalk.nativeArgumentSize);
-    slvm_String_printLine((SLVM_String*)smalltalk.selector);
-    if(smalltalk.oopArgumentCount)
-        printf("Arg 0: %p\n", (void*)requiredArguments->oopArguments[0]);*/
-
-    /* Get the receiver class. */
-    behavior = slvm_getClassFromOop(requiredArguments->receiver);
-    if(slvm_isNil(behavior))
-    {
-        fprintf(stderr, "Invalid object class.");
-        abort();
-    }
-
-    /* Look up the method. */
-    method = slvm_Behavior_lookup(behavior, smalltalk->selector);
     if(slvm_isNil(method))
     {
-        printf("TODO: Send does not understand.\nSelector: ");
+        printf("[%p] TODO: Send does not understand.\nSelector: ", (void*)requiredArguments->receiver);
         slvm_String_printLine((SLVM_String*)smalltalk->selector);
     }
     else
@@ -250,6 +247,7 @@ void* slvm_dynrun_send_dispatch(int senderCallingConvention, void *stackPointer)
             /* Create the primitive context */
             SLVM_PrimitiveContext context = {
                 .errorCode = SLVM_PrimitiveError_Success,
+                .contextCallingConvention = senderCallingConvention,
                 .stackPointer = stackPointer,
                 .selector = smalltalk->selector, .receiver = requiredArguments->receiver,
                 .oopArgumentCount = smalltalk->oopArgumentCount, .oopArguments = requiredArguments->oopArguments,
@@ -289,4 +287,76 @@ void* slvm_dynrun_send_dispatch(int senderCallingConvention, void *stackPointer)
 
     /* Should never reach here. */
     abort();
+}
+
+void* slvm_dynrun_send_dispatch(int senderCallingConvention, void *stackPointer)
+{
+    SLVM_Oop method;
+    SLVM_Behavior *behavior;
+    MessageSmalltalkMetadata smalltalkConverted;
+
+    MessageSendRequiredArguments *requiredArguments = (MessageSendRequiredArguments*)stackPointer;
+    MessageSmalltalkMetadata *smalltalk = &requiredArguments->smalltalk;
+
+    /* Convert the sending metadata layout to the Smalltalk convention. */
+    if(senderCallingConvention == SLVM_CC_CDecl)
+    {
+        slvm_dynrun_convertSendMetadataToSmalltalkFromC(&requiredArguments->c, &smalltalkConverted);
+        smalltalk = &smalltalkConverted;
+    }
+
+    /*puts("Send entered");
+    printf("Send[%p] dispatch to %p: %p %d %d: ", (void*)smalltalk.selector, (void*)requiredArguments->receiver, stackPointer, smalltalk.oopArgumentCount, smalltalk.nativeArgumentSize);
+    slvm_String_printLine((SLVM_String*)smalltalk.selector);
+    if(smalltalk.oopArgumentCount)
+        printf("Arg 0: %p\n", (void*)requiredArguments->oopArguments[0]);*/
+
+    /* Get the receiver class. */
+    behavior = slvm_getClassFromOop(requiredArguments->receiver);
+    if(slvm_isNil(behavior))
+    {
+        fprintf(stderr, "Invalid object class.");
+        abort();
+    }
+
+    /* Look up the method. */
+    method = slvm_Behavior_lookup(behavior, smalltalk->selector);
+    return slvm_dynrun_send_activateMethod(senderCallingConvention, stackPointer, method);
+}
+
+extern SLVM_Oop slvm_primitiveReplaceContextWithCompiledMethodActivation(SLVM_PrimitiveContext *context, SLVM_CompiledMethod *method)
+{
+    return (SLVM_Oop)slvm_dynrun_send_activateMethod(context->contextCallingConvention, context->stackPointer, (SLVM_Oop)method);
+}
+
+/* Marry this context*/
+SLVM_RUNTIME_PRIMITIVE(marryThisContext)
+{
+    printf("TODO: Marry thisContext in frame: %p\n", *SLVM_RUNTIME_PRIMITIVE_ARG(void*, 0));
+    SLVM_RUNTIME_PRIMITIVE_RETURN(1, slvm_nilOop);
+}
+
+/* Full block closure creation. */
+SLVM_RUNTIME_PRIMITIVE(createFullBlockClosure)
+{
+    SLVM_Oop outerContext = *SLVM_RUNTIME_PRIMITIVE_ARG(SLVM_Oop, 0);
+    SLVM_Oop receiver = *SLVM_RUNTIME_PRIMITIVE_ARG(SLVM_Oop, 1);
+    SLVM_CompiledMethod *compiledMethod = *SLVM_RUNTIME_PRIMITIVE_ARG(SLVM_CompiledMethod*, 2);
+    uint32_t copiedParametersSize = *SLVM_RUNTIME_PRIMITIVE_ARG(uint32_t, 3);
+
+    SLVM_FullBlockClosure *closure = SLVM_KNEW(FullBlockClosure, copiedParametersSize);
+    closure->_base_.outerContext = outerContext;
+    closure->_base_.numArgs = compiledMethod->argumentDescriptor;
+    closure->_base_.startpc = (SLVM_Oop)compiledMethod;
+    closure->receiver = receiver;
+    printf("Created closure %p\n", closure);
+
+    SLVM_RUNTIME_PRIMITIVE_RETURN(4, closure);
+}
+
+/* Temporal vector create. */
+SLVM_RUNTIME_PRIMITIVE(tempVectorCreate)
+{
+    SLVM_Array *result = slvm_Array_new(*SLVM_RUNTIME_PRIMITIVE_ARG(size_t, 0));
+    SLVM_RUNTIME_PRIMITIVE_RETURN(1, result);
 }

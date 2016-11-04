@@ -35,7 +35,6 @@ _slvm_dynrun_send_trampoline:
     call slvm_dynrun_send_dispatch
     hlt
 
-
 # _slvm_dynrun_stack_limit_trap
 .global _slvm_dynrun_stack_limit_trap
 .global slvm_dynrun_new_stack_segment
@@ -209,3 +208,34 @@ _slvm_returnToC_trampoline:
     # Return to C
     pushl 8(%ecx)
     ret
+
+# Primitives trampolines
+.global slvm_dynrun_primitive_dispatch
+.global slvm_dynrun_primitive_dispatch_trampoline
+slvm_dynrun_primitive_dispatch_trampoline:
+    push %ebp
+    movl %esp, %ebp
+
+    # Store the stack pointer
+    movl %esp, %edx
+
+    # Fetch the stack segment pointer
+    movl %esp, %ebx
+    andl $-4096, %ebx
+    addl $4096, %ebx
+
+    # Fetch the thread data
+    movl -24(%ebx), %ecx
+
+    # Store the smalltalk stack pointers.
+    movl %esp, -12(%ebx)
+    movl %ebp, -16(%ebx)
+
+    # Restore the C stack
+    movl 0(%ecx), %esp
+    movl 4(%ecx), %ebp
+
+    # Pass the smalltalk stack pointer
+    push %edx
+    call *%eax
+    hlt

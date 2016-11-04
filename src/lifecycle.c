@@ -6,6 +6,7 @@ extern void slvm_internal_init_collections_kernel(void);
 extern void slvm_internal_init_classes(void);
 
 extern void slvm_internal_init_kernel(void);
+extern void slvm_internal_init_context(void);
 extern void slvm_internal_init_collections(void);
 extern void slvm_internal_init_magnitude(void);
 
@@ -34,6 +35,7 @@ void slvm_dynrun_initialize(void)
 
     /* Initialize the main packages. */
     slvm_internal_init_kernel();
+    slvm_internal_init_context();
     slvm_internal_init_collections();
     slvm_internal_init_magnitude();
 
