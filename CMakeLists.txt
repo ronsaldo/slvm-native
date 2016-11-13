@@ -1,5 +1,5 @@
 # SLVM native runtime cmake build script.
-cmake_minimum_required(VERSION 2.8)
+cmake_minimum_required(VERSION 3.0)
 project(SlvmNativeRuntime)
 
 # Check the build type
@@ -8,6 +8,22 @@ if (CMAKE_BUILD_TYPE STREQUAL "")
 	# differentiation between debug and release builds.
 	set(CMAKE_BUILD_TYPE "Debug" CACHE STRING "Choose the type of build, options are: None (CMAKE_CXX_FLAGS or CMAKE_C_FLAGS used) Debug Release RelWithDebInfo MinSizeRel." FORCE)
 endif ()
+
+if("${CMAKE_SYSTEM_PROCESSOR}" MATCHES "x86_64")
+	option(BUILD_I386_VERSION "Build x86 32 bits version" OFF)
+	if(BUILD_I386_VERSION)
+		if(WIN32)
+	        set(CMAKE_ASM_NASM_OBJECT_FORMAT win32)
+	    elseif(APPLE)
+	        set(CMAKE_ASM_NASM_OBJECT_FORMAT macho)
+	    else()
+	    	set(CMAKE_ASM_NASM_OBJECT_FORMAT elf)
+	    endif()
+		set(CMAKE_ASM-ATT_FLAGS "--32")
+		set(CMAKE_CXX_FLAGS "-m32")
+		set(CMAKE_C_FLAGS "-m32")
+	endif()
+endif()
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
@@ -33,7 +49,17 @@ include(${CMAKE_ROOT}/Modules/CheckFunctionExists.cmake)
 include(${CMAKE_ROOT}/Modules/CheckLibraryExists.cmake)
 
 # Enable the assembler.
-enable_language(ASM-ATT)
+if("${CMAKE_SYSTEM_PROCESSOR}" MATCHES "i.86" OR "${CMAKE_SYSTEM_PROCESSOR}" MATCHES "x86_64")
+	if(WIN32)
+		set(CMAKE_ASM_NASM_FLAGS -D_WIN32)
+	elseif(APPLE)
+		set(CMAKE_ASM_NASM_FLAGS -D_APPLE)
+	else()
+		set(CMAKE_ASM_NASM_FLAGS -D_UNIX)
+	endif()
+
+	enable_language(ASM_NASM)
+endif()
 
 # Set output dir.
 set(EXECUTABLE_OUTPUT_PATH "${SlvmNativeRuntime_BINARY_DIR}/dist")

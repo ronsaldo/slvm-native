@@ -5,5 +5,6 @@
 #include "classes.h"
 #include "lifecycle.h"
 #include "memory.h"
+#include "send.h"
 
 #endif /* SLVM_DYNRUNTIME_H */

@@ -228,10 +228,4 @@ extern SLVM_Oop slvm_dynrun_subclassWithSomeNames(SLVM_Oop superClassName,
         SLVM_Oop categoryName);
 extern SLVM_Oop slvm_dynrun_registerMethodWithNames(SLVM_Oop method, SLVM_Oop selector, SLVM_Oop className, SLVM_Oop classSide);
 
-/**
- * Message send
- */
-extern void slvm_dynrun_send(void *stackPointer);
-extern SLVM_Oop slvm_dynrun_csend(int argumentDescription, SLVM_Oop selector, ...);
-
 #endif /* SLVM_CLASSES_KERNEL_H */

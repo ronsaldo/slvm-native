@@ -10,9 +10,16 @@ set(Classes_Sources
     classes/magnitude.c
 )
 
-if("${CMAKE_SYSTEM_PROCESSOR}" MATCHES "i.86" OR "${CMAKE_SYSTEM_PROCESSOR}" MATCHES "x86_64")
+if("${CMAKE_SYSTEM_PROCESSOR}" MATCHES "i.86" OR ("${CMAKE_SYSTEM_PROCESSOR}" MATCHES "x86_64" AND BUILD_I386_VERSION))
    set(Native_Sources
-       native/x86/trampolines.s
+       native/x86/trampolines.nasm
+       native/x86/send.c
+   )
+endif()
+
+if("${CMAKE_SYSTEM_PROCESSOR}" MATCHES "x86_64" AND NOT BUILD_I386_VERSION)
+   set(Native_Sources
+       native/x86_64/trampolines.nasm
        native/x86/send.c
    )
 endif()

@@ -12,8 +12,16 @@ typedef struct
 
 typedef struct
 {
-    uint16_t oopArgumentCount;
-    uint16_t nativeArgumentSize;
+    union
+    {
+        struct
+        {
+            uint16_t oopArgumentCount;
+            uint16_t nativeArgumentSize;
+        };
+        size_t argumentDescriptor;
+    };
+
     SLVM_Oop selector;
     void *framePointer;
     void *returnPointer;
@@ -23,8 +31,16 @@ typedef struct
 {
     void *framePointer;
     void *returnPointer;
-    uint16_t oopArgumentCount;
-    uint16_t nativeArgumentSize;
+    union
+    {
+        struct
+        {
+            uint16_t oopArgumentCount;
+            uint16_t nativeArgumentSize;
+        };
+        size_t argumentDescriptor;
+    };
+
     SLVM_Oop selector;
 } MessageCMetadata;
 
@@ -68,7 +84,7 @@ static void slvm_dynrun_returnToSmalltalkSender(MessageSendRequiredArguments *ar
 #define SLVM_RUNTIME_PRIMITIVE(name) void slvm_dynrun_primitive_ ## name(RuntimePrimitiveArguments *_stackPointer)
 #define SLVM_RUNTIME_PRIMITIVE_ARG(type, index) ((type*)(_stackPointer->arguments + (index)))
 #define SLVM_RUNTIME_PRIMITIVE_RETURN(popCount, returnValue) { \
-    MessageReturnFrame *_returnFrame = (MessageReturnFrame*)(((uint8_t*)&_stackPointer->arguments[((popCount) + 3) & (-4)]) - sizeof(MessageReturnFrame)); \
+    MessageReturnFrame *_returnFrame = (MessageReturnFrame*) (((uint8_t*)&_stackPointer->arguments) + ((popCount*sizeof(SLVM_Oop) + 15) & (-16)) - sizeof(MessageReturnFrame)); \
     _returnFrame->returnPointer = _stackPointer->returnPointer; \
     _returnFrame->framePointer = _stackPointer->framePointer; \
     _slvm_dynrun_returnToSender_trampoline(&_returnFrame->framePointer, (void*)(returnValue)); \
@@ -174,6 +190,7 @@ static void* slvm_dynrun_send_activateMethod(int senderCallingConvention, void *
     {
         printf("[%p] TODO: Send does not understand.\nSelector: ", (void*)requiredArguments->receiver);
         slvm_String_printLine((SLVM_String*)smalltalk->selector);
+        abort();
     }
     else
     {
@@ -199,6 +216,7 @@ static void* slvm_dynrun_send_activateMethod(int senderCallingConvention, void *
                 {
                     printf("TODO: Send from Smalltalk stack to C stack\n");
                     /* We need to change back to the C stack. */
+                    abort();
                 }
             }
             else if(senderCallingConvention == SLVM_CC_CDecl)
@@ -225,7 +243,7 @@ static void* slvm_dynrun_send_activateMethod(int senderCallingConvention, void *
                     memcpy(stackSegment->stackPointer, &requiredArguments->receiver, totalArgumentSize);
 
                     /* Store the backward trampoline pointer. */
-                    stackSegment->stackPointer -= 4;
+                    stackSegment->stackPointer -= sizeof(void*);
                     *((void**)stackSegment->stackPointer) = &_slvm_returnToC_trampoline;
 
                     /* Push again the arguments in the stack. */
@@ -306,9 +324,9 @@ void* slvm_dynrun_send_dispatch(int senderCallingConvention, void *stackPointer)
     }
 
     /*puts("Send entered");
-    printf("Send[%p] dispatch to %p: %p %d %d: ", (void*)smalltalk.selector, (void*)requiredArguments->receiver, stackPointer, smalltalk.oopArgumentCount, smalltalk.nativeArgumentSize);
-    slvm_String_printLine((SLVM_String*)smalltalk.selector);
-    if(smalltalk.oopArgumentCount)
+    printf("Send[%p] dispatch to %p: %p %d %d: ", (void*)smalltalk->selector, (void*)requiredArguments->receiver, stackPointer, smalltalk->oopArgumentCount, smalltalk->nativeArgumentSize);
+    slvm_String_printLine((SLVM_String*)smalltalk->selector);
+    if(smalltalk->oopArgumentCount)
         printf("Arg 0: %p\n", (void*)requiredArguments->oopArguments[0]);*/
 
     /* Get the receiver class. */
@@ -349,7 +367,6 @@ SLVM_RUNTIME_PRIMITIVE(createFullBlockClosure)
     closure->_base_.numArgs = compiledMethod->argumentDescriptor;
     closure->_base_.startpc = (SLVM_Oop)compiledMethod;
     closure->receiver = receiver;
-    printf("Created closure %p\n", closure);
 
     SLVM_RUNTIME_PRIMITIVE_RETURN(4, closure);
 }
