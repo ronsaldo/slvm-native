@@ -32,6 +32,7 @@ typedef struct SLVM_HeapWithPackageInformation_ SLVM_HeapWithPackageInformation;
 typedef struct SLVM_StackHeapInformation_ SLVM_StackHeapInformation;
 typedef struct SLVM_ExecutionStackSegmentHeader_ SLVM_ExecutionStackSegmentHeader;
 typedef struct SLVM_ThreadStackData_ SLVM_ThreadStackData;
+typedef struct SLVM_StackFrameHeader_ SLVM_StackFrameHeader;
 
 struct SLVM_HeapInformation_
 {
@@ -66,7 +67,7 @@ struct SLVM_ThreadStackData_
 
 struct SLVM_ExecutionStackSegmentHeader_
 {
-    void* reserved;
+    uint8_t *baseFramePointer;
     size_t segmentSize;
     SLVM_ThreadStackData *threadData;
     uint8_t *linkPointer; /* Not used in X86 */
@@ -74,6 +75,22 @@ struct SLVM_ExecutionStackSegmentHeader_
     uint8_t *stackPointer;
     SLVM_LinkedListNode header;
 };
+
+struct SLVM_StackFrameHeader_
+{
+    SLVM_Oop firstTemporary;
+    uintptr_t temporaryDescriptor;
+    uintptr_t argumentDescriptor;
+    SLVM_Oop thisContext;
+    SLVM_Oop method;
+    uint8_t *previousFramePointer;
+    /* TODO: add the link pointer, and things like that. */
+    uint8_t *returnPointer;
+    SLVM_Oop receiver;
+    SLVM_Oop arguments[];
+};
+
+#define slvm_stackFrameHeaderFromFramePointer(framePointer) ((SLVM_StackFrameHeader*) ( ((uint8_t*)(framePointer)) - offsetof(SLVM_StackFrameHeader, previousFramePointer) ))
 
 /**
  * Virtual memory interface

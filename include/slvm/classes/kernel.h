@@ -119,6 +119,7 @@ extern SLVM_False slvm_false;
 #define slvm_Behavior_decodeFixedSize(formatAndSize) (slvm_decodeSmallInteger(formatAndSize) & 0xFFFF)
 
 extern SLVM_ProtoObject *slvm_Behavior_basicNew(SLVM_Behavior *behavior, size_t variableSize);
+extern SLVM_ProtoObject *slvm_Behavior_basicNewMixedNative(SLVM_Behavior *behavior, size_t variableSize, size_t nativeVariableSize);
 extern SLVM_Oop slvm_Behavior_lookup(SLVM_Behavior *behavior, SLVM_Oop selector);
 
 /**
@@ -206,6 +207,9 @@ SLVM_IMPLEMENT_KERNEL_CLASS_EXPLICIT_FORMAT(className, superClassName, \
 
 #define SLVM_KNEW(className, extraSize) \
     (SLVM_ ## className*) slvm_Behavior_basicNew((SLVM_Behavior*)SLVM_KCLASS(className), extraSize)
+
+#define SLVM_KNEW_MIXED_NATIVE(className, extraSize, nativeExtraSize) \
+    (SLVM_ ## className*) slvm_Behavior_basicNewMixedNative((SLVM_Behavior*)SLVM_KCLASS(className), extraSize, nativeExtraSize)
 
 #define SLVM_KCLASS_VARIABLE_SET(className, classVariableName, classVariableValue)  \
     slvm_IdentityDictionary_atPut((SLVM_IdentityDictionary*)SLVM_KCLASS(className)->classPool, \

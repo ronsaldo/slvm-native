@@ -7,7 +7,8 @@ typedef struct SLVM_CompiledMethod_ SLVM_CompiledMethod;
 typedef struct SLVM_PrimitiveMethod_ SLVM_PrimitiveMethod;
 
 typedef SLVM_Object SLVM_Message;
-typedef SLVM_Object SLVM_MethodContext;
+typedef struct SLVM_InstructionStream_ SLVM_InstructionStream;
+typedef struct SLVM_MethodContext_ SLVM_MethodContext;
 typedef struct SLVM_BlockClosure_ SLVM_BlockClosure;
     typedef struct SLVM_FullBlockClosure_ SLVM_FullBlockClosure;
 
@@ -78,7 +79,30 @@ struct SLVM_FullBlockClosure_
     SLVM_Oop receiver;
 };
 
+struct SLVM_InstructionStream_
+{
+    SLVM_Object _base_;
+    SLVM_Oop sender;
+    SLVM_Oop pc;
+};
+
+struct SLVM_MethodContext_
+{
+    SLVM_InstructionStream _base_;
+    SLVM_Oop stackp;
+    SLVM_Oop method;
+    SLVM_Oop closureOrNil;
+    SLVM_Oop receiver;
+    SLVM_Oop argumentDescriptor;
+    SLVM_Oop temporaryDescriptor;
+    SLVM_Oop data[];
+};
+
 #define slvm_ArgumentDescriptor_make(oopArgumentCount, nativeArgumentSize) (((nativeArgumentSize) << 16) | (oopArgumentCount))
+#define slvm_ArgumentDescriptor_getOopCount(descriptor) ((descriptor) & 0xFFFF)
+#define slvm_ArgumentDescriptor_getNativeSize(descriptor) (((descriptor) >> 16) & 0xFFFF)
+#define slvm_TemporaryDescriptor_getOopCount(descriptor) ((descriptor) & 0xFFFF)
+#define slvm_TemporaryDescriptor_getNativeSize(descriptor) (((descriptor) >> 16) & 0xFFFF)
 
 #define slvm_CompiledMethod_getCallingConvention(method) \
     (slvm_decodeSmallInteger(method->flags) & 7)
@@ -87,7 +111,8 @@ SLVM_DECLARE_KERNEL_CLASS(CompiledMethod)
 SLVM_DECLARE_KERNEL_CLASS(PrimitiveMethod)
 
 SLVM_DECLARE_KERNEL_CLASS(Message)
-SLVM_DECLARE_KERNEL_CLASS(MethodContext)
+SLVM_DECLARE_KERNEL_CLASS(InstructionStream)
+    SLVM_DECLARE_KERNEL_CLASS(MethodContext)
 SLVM_DECLARE_KERNEL_CLASS(BlockClosure)
     SLVM_DECLARE_KERNEL_CLASS(FullBlockClosure)
 

@@ -350,8 +350,53 @@ extern SLVM_Oop slvm_primitiveReplaceContextWithCompiledMethodActivation(SLVM_Pr
 /* Marry this context*/
 SLVM_RUNTIME_PRIMITIVE(marryThisContext)
 {
-    printf("TODO: Marry thisContext in frame: %p\n", *SLVM_RUNTIME_PRIMITIVE_ARG(void*, 0));
-    SLVM_RUNTIME_PRIMITIVE_RETURN(1, slvm_nilOop);
+    size_t oopArgumentCount;
+    size_t nativeArgumentSize;
+    size_t oopTemporaryCount;
+    size_t nativeTemporarySize;
+    size_t oopCount;
+    size_t nativeSize;
+    uint8_t *contextNativeData;
+
+    uint8_t *framePointer;
+    SLVM_StackFrameHeader *stackFrameHeader;
+    SLVM_MethodContext *context;
+
+    /* Fetch the stack frame data. */
+    framePointer = *SLVM_RUNTIME_PRIMITIVE_ARG(uint8_t*, 0);
+    stackFrameHeader = slvm_stackFrameHeaderFromFramePointer(framePointer);
+
+    /* Decode the stack layout descriptors */
+    oopArgumentCount = slvm_ArgumentDescriptor_getOopCount(stackFrameHeader->argumentDescriptor);
+    nativeArgumentSize = slvm_ArgumentDescriptor_getNativeSize(stackFrameHeader->argumentDescriptor);
+
+    oopTemporaryCount = slvm_TemporaryDescriptor_getOopCount(stackFrameHeader->temporaryDescriptor);
+    nativeTemporarySize = slvm_TemporaryDescriptor_getNativeSize(stackFrameHeader->temporaryDescriptor);
+
+    /* Allocate the context object */
+    oopCount = oopArgumentCount + oopTemporaryCount;
+    nativeSize = nativeArgumentSize + nativeTemporarySize;
+    context = SLVM_KNEW_MIXED_NATIVE(MethodContext, oopCount, nativeSize);
+
+    /* Copy the context parameters. */
+    context->_base_.sender = slvm_encodeAlignedPointerAsSmallInteger(framePointer);
+    context->_base_.pc = slvm_encodeAlignedPointerAsSmallInteger(stackFrameHeader->previousFramePointer);
+    context->method = stackFrameHeader->method;
+    context->argumentDescriptor = slvm_encodeSmallInteger(stackFrameHeader->argumentDescriptor);
+    context->temporaryDescriptor = slvm_encodeSmallInteger(stackFrameHeader->temporaryDescriptor);
+    context->receiver = stackFrameHeader->receiver;
+
+    /* Copy the arguments to the context. */
+    for(size_t i = 0; i < oopArgumentCount; ++i)
+        context->data[i] = stackFrameHeader->arguments[i];
+
+    /* Copy the native arguments. */
+    contextNativeData = slvm_firstNativeDataPointer((SLVM_Oop)context);
+    memcpy(contextNativeData, &stackFrameHeader->arguments[oopArgumentCount], nativeArgumentSize);
+
+    /* Store the this context in the stack frame. */
+    stackFrameHeader->thisContext = (SLVM_Oop)context;
+    SLVM_RUNTIME_PRIMITIVE_RETURN(1, context);
 }
 
 /* Full block closure creation. */

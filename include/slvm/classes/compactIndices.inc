@@ -85,3 +85,4 @@ COMPACT_CLASS_INDEX(GlobalVariable, 194)
 COMPACT_CLASS_INDEX(WorkspaceVariable, 195)
 
 COMPACT_CLASS_INDEX(FullBlockClosure, 196)
+COMPACT_CLASS_INDEX(InstructionStream, 197)

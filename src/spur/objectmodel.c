@@ -17,11 +17,12 @@ static unsigned int slvm_classTableSize = 0;
 static SLVM_LinkedList staticHeaps;
 static SLVM_StackHeapInformation compactingHeap;
 
-typedef void (*SLVM_SpurHeapIterator) (SLVM_HeapInformation *heapInformation, SLVM_Oop *forwardingPointer, SLVM_ObjectHeader *objectHeader, size_t slotCount);
+typedef void (*SLVM_SpurHeapIterator) (SLVM_HeapInformation *heapInformation, SLVM_Oop *forwardingPointer, SLVM_ObjectHeader *objectHeader, size_t oopSlotCount, size_t totalSlotCount);
 
 static void slvm_spur_heap_iterate(SLVM_HeapInformation *heapInformation, SLVM_SpurHeapIterator iterator)
 {
-    uint64_t slotCount;
+    uint64_t oopSlotCount;
+    uint64_t totalSlotCount;
     uint64_t *forwardingPointer;
     SLVM_ObjectHeader *objectHeader;
     uint8_t *position;
@@ -37,24 +38,32 @@ static void slvm_spur_heap_iterate(SLVM_HeapInformation *heapInformation, SLVM_S
         /* We are using the least significant bit to signal for size preheader. */
         if(*forwardingPointer & 1)
         {
-            slotCount = forwardingPointer[2];
             position += 24;
             objectHeader = (SLVM_ObjectHeader *)position;
+            if(objectHeader->objectFormat >= OF_MIXED_OBJECT)
+            {
+                oopSlotCount = forwardingPointer[2] >> 32;
+                totalSlotCount = forwardingPointer[2] & 0xFFFFFFFF;
+            }
+            else
+            {
+                oopSlotCount = totalSlotCount = forwardingPointer[2];
+            }
             assert(objectHeader->slotCount == 255);
         }
         else
         {
             position += 8;
             objectHeader = (SLVM_ObjectHeader *)position;
-            slotCount = objectHeader->slotCount;
+            oopSlotCount = totalSlotCount = objectHeader->slotCount;
             assert(objectHeader->slotCount < 255);
         }
 
         /* Call the iterator. */
-        iterator(heapInformation, (SLVM_Oop *)forwardingPointer, objectHeader, (size_t)slotCount);
+        iterator(heapInformation, (SLVM_Oop *)forwardingPointer, objectHeader, (size_t)oopSlotCount, (size_t)totalSlotCount);
 
         /* Increase the position. */
-        position += sizeof(SLVM_ObjectHeader) + slotCount * sizeof(SLVM_Oop);
+        position += sizeof(SLVM_ObjectHeader) + totalSlotCount * sizeof(SLVM_Oop);
 
         /* Align the position into a 16 byte boundary. */
         position = (uint8_t*) (((uintptr_t)position + 15) & (-16));
@@ -196,6 +205,33 @@ static SLVM_ObjectHeader *slvm_spur_instantiate_object(unsigned int format, size
     return result;
 }
 
+static SLVM_ObjectHeader *slvm_spur_instantiate_mixed_object(unsigned int format, size_t oopSlotCount, size_t slotCount)
+{
+    const size_t preheaderSize = 8 + 16;
+    size_t totalSize;
+    uint8_t *rawResult;
+    uint64_t *rawResult64;
+    SLVM_ObjectHeader *result;
+
+    /* Compute the total object size. */
+    totalSize = preheaderSize + sizeof(SLVM_ObjectHeader) + slotCount * sizeof(SLVM_Oop);
+
+    /* Allocate the object itself. */
+    rawResult = (uint8_t*)slvm_StackHeap_allocate(&compactingHeap, 16, totalSize);
+    rawResult64 = (uint64_t*)rawResult;
+
+    /* Set the object pre-header */
+    rawResult64[0] = 1; /* Big object flag. */
+    rawResult64[2] = slotCount | (((uint64_t)oopSlotCount) << 32ul); /* Slot count*/
+
+    /* Initialize the object header. */
+    result = (SLVM_ObjectHeader*)(rawResult + preheaderSize);
+    memset(result, 0, sizeof(SLVM_ObjectHeader));
+    result->slotCount = 255; /* Always big object header here. */
+    result->identityHash = ((size_t)result) >> 4;
+    return result;
+}
+
 static unsigned int slvm_spur_format_multiplier(unsigned int format)
 {
     switch(format)
@@ -223,14 +259,14 @@ static unsigned int slvm_spur_format_multiplier(unsigned int format)
     case OF_INDEXABLE_8_7:
         return sizeof(SLVM_Oop);
 
-    case OF_COMPILED_METHOD:
-    case OF_COMPILED_METHOD_1:
-    case OF_COMPILED_METHOD_2:
-    case OF_COMPILED_METHOD_3:
-    case OF_COMPILED_METHOD_4:
-    case OF_COMPILED_METHOD_5:
-    case OF_COMPILED_METHOD_6:
-    case OF_COMPILED_METHOD_7:
+    case OF_MIXED_OBJECT:
+    case OF_MIXED_OBJECT_1:
+    case OF_MIXED_OBJECT_2:
+    case OF_MIXED_OBJECT_3:
+    case OF_MIXED_OBJECT_4:
+    case OF_MIXED_OBJECT_5:
+    case OF_MIXED_OBJECT_6:
+    case OF_MIXED_OBJECT_7:
         return sizeof(SLVM_Oop);
 
     default:
@@ -256,13 +292,13 @@ static unsigned int slvm_spur_formatExtraSize(unsigned int format)
     case OF_INDEXABLE_8_6: return 6;
     case OF_INDEXABLE_8_7: return 7;
 
-    case OF_COMPILED_METHOD_1: return 1;
-    case OF_COMPILED_METHOD_2: return 2;
-    case OF_COMPILED_METHOD_3: return 3;
-    case OF_COMPILED_METHOD_4: return 4;
-    case OF_COMPILED_METHOD_5: return 5;
-    case OF_COMPILED_METHOD_6: return 6;
-    case OF_COMPILED_METHOD_7: return 7;
+    case OF_MIXED_OBJECT_1: return 1;
+    case OF_MIXED_OBJECT_2: return 2;
+    case OF_MIXED_OBJECT_3: return 3;
+    case OF_MIXED_OBJECT_4: return 4;
+    case OF_MIXED_OBJECT_5: return 5;
+    case OF_MIXED_OBJECT_6: return 6;
+    case OF_MIXED_OBJECT_7: return 7;
 
     default:
         return 0;
@@ -279,9 +315,26 @@ size_t slvm_basicSize(SLVM_Oop object)
     header = (SLVM_ObjectHeader*)object;
     format = header->objectFormat;
     if(header->slotCount == 255)
+    {
+        if(format >= OF_MIXED_OBJECT)
+            return (((uint64_t*)header)[-1] & 0xFFFFFFFF)*sizeof(SLVM_Oop) - slvm_spur_formatExtraSize(format);
         return ((uint64_t*)header)[-1]*slvm_spur_format_multiplier(format) - slvm_spur_formatExtraSize(format);
+    }
     else
         return header->slotCount*slvm_spur_format_multiplier(format) - slvm_spur_formatExtraSize(format);
+}
+
+uint8_t *slvm_firstNativeDataPointer(SLVM_Oop value)
+{
+    SLVM_ObjectHeader *header;
+    uint32_t *objectPreHeader;
+
+    header = (SLVM_ObjectHeader*)value;
+    assert(slvm_oopIsPointers(value));
+    assert(header->objectFormat >= OF_MIXED_OBJECT);
+
+    objectPreHeader = (uint32_t*)value;
+    return ((uint8_t*)value) + sizeof(SLVM_ObjectHeader) + objectPreHeader[-1]*sizeof(SLVM_Oop);
 }
 
 /**
@@ -304,6 +357,7 @@ SLVM_ProtoObject *slvm_Behavior_basicNew(SLVM_Behavior *behavior, size_t variabl
     /* Decode the class format. */
     format = slvm_Behavior_decodeFormat(behavior->format);
     fixedSlotCount = slvm_Behavior_decodeFixedSize(behavior->format);
+    assert(format < OF_MIXED_OBJECT);
 
     /* Compute the actual number of slots. */
     slotCount = fixedSlotCount;
@@ -328,7 +382,6 @@ SLVM_ProtoObject *slvm_Behavior_basicNew(SLVM_Behavior *behavior, size_t variabl
         extraSlotCount = (variableSize*2 + sizeof(SLVM_Oop) - 1) / sizeof(SLVM_Oop);
         break;
 	case OF_INDEXABLE_8:
-	case OF_COMPILED_METHOD:
         elementSize = 1;
         extraSlotCount = (variableSize + sizeof(SLVM_Oop) - 1) / sizeof(SLVM_Oop);
         break;
@@ -349,16 +402,60 @@ SLVM_ProtoObject *slvm_Behavior_basicNew(SLVM_Behavior *behavior, size_t variabl
 
     /* Initialize the object content. */
     objectData = ((uint8_t*)result) + sizeof(SLVM_ObjectHeader);
-    if(format < OF_INDEXABLE_64 || format >= OF_COMPILED_METHOD)
+    if(format < OF_INDEXABLE_64)
     {
         objectOopData = (SLVM_Oop*)objectData;
         for(i = 0; i < slotCount; ++i)
             objectOopData[i] = slvm_nilOop;
     }
-    else if(format < OF_COMPILED_METHOD)
+    else if(format < OF_MIXED_OBJECT)
     {
         memset(objectData, 0, sizeof(SLVM_Oop)*slotCount);
     }
+
+    return result;
+}
+
+SLVM_ProtoObject *slvm_Behavior_basicNewMixedNative(SLVM_Behavior *behavior, size_t variableSize, size_t nativeVariableSize)
+{
+    SLVM_ProtoObject *result;
+    unsigned int format;
+    size_t fixedSlotCount;
+    size_t slotCount;
+    size_t extraSlotCount;
+    size_t variableContentSize;
+    size_t remainingSize;
+    size_t oopSlotCount;
+    uint8_t *objectData;
+    SLVM_Oop *objectOopData;
+    size_t i;
+    assert(!slvm_isNil(behavior));
+
+    /* Decode the class format. */
+    format = slvm_Behavior_decodeFormat(behavior->format);
+    fixedSlotCount = slvm_Behavior_decodeFixedSize(behavior->format);
+
+    /* Compute the actual number of slots. */
+    slotCount = fixedSlotCount;
+    oopSlotCount = slotCount + variableSize;
+    variableContentSize = variableSize*sizeof(SLVM_Oop) + nativeVariableSize;
+    extraSlotCount = (variableContentSize + sizeof(SLVM_Oop) - 1) / sizeof(SLVM_Oop);
+
+    /* Extra padding elements are encoded in the object format. */
+    remainingSize = extraSlotCount*sizeof(SLVM_Oop) - variableContentSize;
+    slotCount += extraSlotCount;
+
+    /* Instantiate the object. */
+    result = (SLVM_ProtoObject*)slvm_spur_instantiate_mixed_object(format, oopSlotCount, slotCount);
+    result->_header_.classIndex = behavior->_base_._header_.identityHash;
+    result->_header_.objectFormat = format + remainingSize;
+
+    /* Initialize the object content. */
+    objectData = ((uint8_t*)result) + sizeof(SLVM_ObjectHeader);
+    objectOopData = (SLVM_Oop*)objectData;
+    for(i = 0; i < oopSlotCount; ++i)
+        objectOopData[i] = slvm_nilOop;
+    memset(&objectOopData[oopSlotCount], 0, sizeof(SLVM_Oop)*(slotCount - oopSlotCount));
 
     return result;
 }
@@ -374,7 +471,7 @@ void slvm_dynrun_unregisterArrayOfRoots(SLVM_Oop *array, size_t numberOfElements
 {
 }
 
-static void slvm_internal_fixStaticHeap_clearAndSetForwarding(SLVM_HeapInformation *heapInformation, SLVM_Oop *forwardingPointer, SLVM_ObjectHeader *header, size_t slotCount)
+static void slvm_internal_fixStaticHeap_clearAndSetForwarding(SLVM_HeapInformation *heapInformation, SLVM_Oop *forwardingPointer, SLVM_ObjectHeader *header, size_t oopSlotCount, size_t totalSlotCount)
 {
     SLVM_Oop becomeTarget;
     /* Clear the forwarding pointer. */
@@ -390,7 +487,7 @@ static void slvm_internal_fixStaticHeap_clearAndSetForwarding(SLVM_HeapInformati
         *forwardingPointer |= becomeTarget;
 }
 
-static void slvm_spur_heap_applyNotNullForwarding(SLVM_HeapInformation *heapInformation, SLVM_Oop *forwardingPointer, SLVM_ObjectHeader *header, size_t slotCount)
+static void slvm_spur_heap_applyNotNullForwarding(SLVM_HeapInformation *heapInformation, SLVM_Oop *forwardingPointer, SLVM_ObjectHeader *header, size_t oopSlotCount, size_t totalSlotCount)
 {
     size_t i;
     SLVM_Oop *objectData;
@@ -401,12 +498,12 @@ static void slvm_spur_heap_applyNotNullForwarding(SLVM_HeapInformation *heapInfo
     SLVM_Oop heapEnd = heapStart + heapInformation->size;
 
     /* If the object does not contain pointers, ignore it. */
-    if(header->objectFormat >= OF_INDEXABLE_64)
+    if(header->objectFormat >= OF_INDEXABLE_64 && header->objectFormat < OF_MIXED_OBJECT)
         return;
 
     /* Cast the object. */
     objectData = (SLVM_Oop*)&header[1];
-    for(i = 0; i < slotCount; ++i)
+    for(i = 0; i < oopSlotCount; ++i)
     {
         element = objectData[i];
         if(!slvm_oopIsPointers(element))

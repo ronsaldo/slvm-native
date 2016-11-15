@@ -52,14 +52,14 @@ enum ObjectFormat
 	OF_INDEXABLE_8_5,
 	OF_INDEXABLE_8_6,
 	OF_INDEXABLE_8_7,
-	OF_COMPILED_METHOD = 24,
-	OF_COMPILED_METHOD_1,
-	OF_COMPILED_METHOD_2,
-	OF_COMPILED_METHOD_3,
-	OF_COMPILED_METHOD_4,
-	OF_COMPILED_METHOD_5,
-	OF_COMPILED_METHOD_6,
-	OF_COMPILED_METHOD_7,
+	OF_MIXED_OBJECT = 24,
+	OF_MIXED_OBJECT_1,
+	OF_MIXED_OBJECT_2,
+	OF_MIXED_OBJECT_3,
+	OF_MIXED_OBJECT_4,
+	OF_MIXED_OBJECT_5,
+	OF_MIXED_OBJECT_6,
+	OF_MIXED_OBJECT_7,
 
 	OF_INDEXABLE_NATIVE_FIRST = OF_INDEXABLE_64,
 };
@@ -158,6 +158,9 @@ typedef struct SLVM_Behavior_ SLVM_Behavior;
 #define slvm_encodeSmallInteger(value) ((value << SLVM_SPUR_SMALLINTEGER_TAG_BITS) | SLVM_SPUR_SMALLINTEGER_TAG_VALUE)
 #define slvm_decodeSmallInteger(oop) (((SLVM_SOop)(oop)) >> SLVM_SPUR_SMALLINTEGER_TAG_BITS)
 
+#define slvm_encodeAlignedPointerAsSmallInteger(value) (((SLVM_Oop)(value)) + SLVM_SPUR_SMALLINTEGER_TAG_VALUE)
+#define slvm_decodeSmallIntegerAsAlignedPointer(oop) (((SLVM_Oop)(oop)) - SLVM_SPUR_SMALLINTEGER_TAG_VALUE)
+
 #define slvm_getClassIndexFromOop(oop) (slvm_oopIsPointers(oop) ? ((SLVM_ObjectHeader*)(oop))->classIndex : ((oop) & SLVM_SPUR_TAG_MASK))
 #define slvm_getClassFromOop(oop) slvm_classTable[slvm_getClassIndexFromOop(oop) >> 12][slvm_getClassIndexFromOop(oop) & 1023]
 
@@ -165,6 +168,7 @@ typedef struct SLVM_Behavior_ SLVM_Behavior;
 #define slvm_identityHash(oop) (slvm_oopIsImmediate(oop) ? (oop >> SLVM_SPUR_SMALLINTEGER_TAG_BITS) : ((SLVM_ObjectHeader*)oop)->identityHash)
 
 extern SLVM_Oop slvm_makeInteger(SLVM_Oop value);
+extern uint8_t *slvm_firstNativeDataPointer(SLVM_Oop value);
 
 /**
  * A sparse class table
