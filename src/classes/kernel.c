@@ -100,6 +100,17 @@ void slvm_globals_atPut(SLVM_Oop symbol, SLVM_Oop value)
     slvm_SystemDictionary_atPut(kernelRoots.globals, symbol, value);
 }
 
+extern SLVM_Oop slvm_globals_addIfNotExistent(SLVM_Oop variable)
+{
+    return (SLVM_Oop)slvm_IdentityDictionary_addAssociationIfNotExistent((SLVM_IdentityDictionary*)kernelRoots.globals, (SLVM_Association*)variable);
+}
+
+extern SLVM_Oop slvm_globals_fixClassVariable(SLVM_Oop variable)
+{
+    /* TODO: Implement this. */
+    return variable;
+}
+
 /**
  * Kernel class initialization.
  */
@@ -281,16 +292,19 @@ static SLVM_Oop slvm_ProtoObject_primitive_class(SLVM_PrimitiveContext *context)
 static SLVM_Oop slvm_Behavior_primitive_basicNew(SLVM_PrimitiveContext *context)
 {
     SLVM_Behavior *behavior = (SLVM_Behavior*)context->receiver;
+    return (SLVM_Oop)slvm_Behavior_basicNew(behavior, 0);
+}
+
+static SLVM_Oop slvm_Behavior_primitive_basicNewWithSize(SLVM_PrimitiveContext *context)
+{
+    SLVM_Behavior *behavior = (SLVM_Behavior*)context->receiver;
     size_t variableSize = 0;
 
-    if(context->oopArgumentCount == 1)
-    {
-        if(!slvm_oopIsSmallInteger(context->oopArguments[0]))
-            slvm_primitiveFailWithError(context, SLVM_PrimitiveError_InvalidArgument);
+    /* TODO: Make sure the object has variable size.*/
+    if(!slvm_oopIsSmallInteger(context->oopArguments[0]))
+        slvm_primitiveFailWithError(context, SLVM_PrimitiveError_InvalidArgument);
 
-        variableSize = slvm_decodeSmallInteger(context->oopArguments[0]);
-    }
-
+    variableSize = slvm_decodeSmallInteger(context->oopArguments[0]);
     return (SLVM_Oop)slvm_Behavior_basicNew(behavior, variableSize);
 }
 
@@ -312,5 +326,6 @@ void slvm_internal_init_kernel(void)
 
     /* Behavior */
     SLVM_KCLASS_ADD_PRIMITIVE(Behavior, "basicNew", basicNew);
+    SLVM_KCLASS_ADD_PRIMITIVE(Behavior, "basicNew:", basicNewWithSize);
     SLVM_KCLASS_ADD_PRIMITIVE(Behavior, "registerAsBehavior", registerAsBehavior);
 }

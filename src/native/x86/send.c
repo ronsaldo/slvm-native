@@ -188,7 +188,7 @@ static void* slvm_dynrun_send_activateMethod(int senderCallingConvention, void *
 
     if(slvm_isNil(method))
     {
-        printf("[%p] TODO: Send does not understand.\nSelector: ", (void*)requiredArguments->receiver);
+        printf("[%p:%d] TODO: Send does not understand.\nSelector: ", (void*)requiredArguments->receiver, (int)slvm_getClassIndexFromOop(requiredArguments->receiver));
         slvm_String_printLine((SLVM_String*)smalltalk->selector);
         abort();
     }

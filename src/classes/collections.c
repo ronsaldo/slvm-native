@@ -428,6 +428,36 @@ void slvm_IdentityDictionary_addAssociation(SLVM_IdentityDictionary *dictionary,
     }
 }
 
+SLVM_Association *slvm_IdentityDictionary_addAssociationIfNotExistent(SLVM_IdentityDictionary *dictionary, SLVM_Association *association)
+{
+    SLVM_Array *array;
+    intptr_t index;
+
+    assert(!slvm_isNil(dictionary));
+    assert(!slvm_isNil(association));
+
+    /* Scan the element */
+    index = slvm_IdentityDictionary_scanFor(dictionary, association->_base_.key);
+    assert(index >= 0);
+
+    /* Put the element at its position. */
+    array = dictionary->array;
+    if(slvm_isNil(array->data[index]))
+    {
+        array->data[index] = (SLVM_Oop)association;
+
+        /* Increase the dictionary size. */
+        dictionary->tally += slvm_encodeSmallIntegerOffset(1);
+        if(slvm_HashedCollection_fullCondition((SLVM_HashedCollection*)dictionary))
+            slvm_IdentityDictionary_grow(dictionary);
+
+        return association;
+    }
+    else
+    {
+        return (SLVM_Association*)array->data[index];
+    }
+}
 void slvm_IdentityDictionary_atPutWithAssociationClass(SLVM_IdentityDictionary *dictionary, SLVM_Oop key, SLVM_Oop value, SLVM_Class *associationClass)
 {
     SLVM_Array *array;

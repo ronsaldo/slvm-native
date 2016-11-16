@@ -471,7 +471,7 @@ void slvm_dynrun_unregisterArrayOfRoots(SLVM_Oop *array, size_t numberOfElements
 {
 }
 
-static void slvm_internal_fixStaticHeap_clearAndSetForwarding(SLVM_HeapInformation *heapInformation, SLVM_Oop *forwardingPointer, SLVM_ObjectHeader *header, size_t oopSlotCount, size_t totalSlotCount)
+static void slvm_internal_fixStaticHeap_symbols(SLVM_HeapInformation *heapInformation, SLVM_Oop *forwardingPointer, SLVM_ObjectHeader *header, size_t oopSlotCount, size_t totalSlotCount)
 {
     SLVM_Oop becomeTarget;
     /* Clear the forwarding pointer. */
@@ -481,6 +481,40 @@ static void slvm_internal_fixStaticHeap_clearAndSetForwarding(SLVM_HeapInformati
     becomeTarget = (SLVM_Oop)header;
     if(header->classIndex == SLVM_KCI_ByteSymbol || header->classIndex == SLVM_KCI_WideSymbol)
         becomeTarget = (SLVM_Oop)slvm_Symbol_internString((SLVM_String*)header);
+
+    /* Update the forwarding pointer. */
+    if(becomeTarget != (SLVM_Oop)header)
+        *forwardingPointer |= becomeTarget;
+}
+
+static void slvm_internal_fixStaticHeap_globalVariables(SLVM_HeapInformation *heapInformation, SLVM_Oop *forwardingPointer, SLVM_ObjectHeader *header, size_t oopSlotCount, size_t totalSlotCount)
+{
+    SLVM_Oop becomeTarget;
+
+    /* Clear the forwarding pointer. */
+    *forwardingPointer &= ~FORWARDING_POINTER_TAG_MASK;
+
+    /* Forward symbols into an interned version of them.*/
+    becomeTarget = (SLVM_Oop)header;
+    if(header->classIndex == SLVM_KCI_GlobalVariable)
+        becomeTarget = slvm_globals_addIfNotExistent((SLVM_Oop)header);
+
+    /* Update the forwarding pointer. */
+    if(becomeTarget != (SLVM_Oop)header)
+        *forwardingPointer |= becomeTarget;
+}
+
+static void slvm_internal_fixStaticHeap_classVariables(SLVM_HeapInformation *heapInformation, SLVM_Oop *forwardingPointer, SLVM_ObjectHeader *header, size_t oopSlotCount, size_t totalSlotCount)
+{
+    SLVM_Oop becomeTarget;
+
+    /* Clear the forwarding pointer. */
+    *forwardingPointer &= ~FORWARDING_POINTER_TAG_MASK;
+
+    /* Forward symbols into an interned version of them.*/
+    becomeTarget = (SLVM_Oop)header;
+    if(header->classIndex == SLVM_KCI_ClassVariable)
+        becomeTarget = slvm_globals_fixClassVariable((SLVM_Oop)header);
 
     /* Update the forwarding pointer. */
     if(becomeTarget != (SLVM_Oop)header)
@@ -525,7 +559,20 @@ static void slvm_spur_heap_applyNotNullForwarding(SLVM_HeapInformation *heapInfo
 
 static void slvm_internal_fixStaticHeap(SLVM_HeapInformation *heapInformation)
 {
-    slvm_spur_heap_iterate(heapInformation, &slvm_internal_fixStaticHeap_clearAndSetForwarding);
+    // Fix the symbols first.
+    slvm_spur_heap_iterate(heapInformation, &slvm_internal_fixStaticHeap_symbols);
+    slvm_spur_heap_iterate(heapInformation, &slvm_spur_heap_applyNotNullForwarding);
+
+    // Fix the global variables.
+    slvm_spur_heap_iterate(heapInformation, &slvm_internal_fixStaticHeap_globalVariables);
+    slvm_spur_heap_iterate(heapInformation, &slvm_spur_heap_applyNotNullForwarding);
+}
+
+
+static void slvm_internal_fixStaticHeapPass2(SLVM_HeapInformation *heapInformation)
+{
+    // Fix the class variables.
+    slvm_spur_heap_iterate(heapInformation, &slvm_internal_fixStaticHeap_classVariables);
     slvm_spur_heap_iterate(heapInformation, &slvm_spur_heap_applyNotNullForwarding);
 }
 
@@ -544,6 +591,9 @@ static void slvm_internal_init_staticHeap(SLVM_HeapInformation *heapInformation)
         packageInformation = (SLVM_HeapWithPackageInformation *)heapInformation;
         packageInformation->packageRegistration();
     }
+
+    if(heapInformation->flags & SHF_MayNeedFixingUp)
+        slvm_internal_fixStaticHeapPass2(heapInformation);
 
     heapInformation->flags |= SHF_Initialized;
 }

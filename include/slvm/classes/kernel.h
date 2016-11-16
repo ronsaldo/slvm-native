@@ -127,6 +127,8 @@ extern SLVM_Oop slvm_Behavior_lookup(SLVM_Behavior *behavior, SLVM_Oop selector)
  */
 extern SLVM_Oop slvm_globals_atOrNil(SLVM_Oop symbol);
 extern void slvm_globals_atPut(SLVM_Oop symbol, SLVM_Oop value);
+extern SLVM_Oop slvm_globals_addIfNotExistent(SLVM_Oop variable);
+extern SLVM_Oop slvm_globals_fixClassVariable(SLVM_Oop variable);
 
 #define SLVM_GET_GLOBAL(globalName) \
     slvm_globals_atOrNil((SLVM_Oop)slvm_Symbol_internCString(#globalName))
