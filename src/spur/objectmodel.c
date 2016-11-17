@@ -559,11 +559,11 @@ static void slvm_spur_heap_applyNotNullForwarding(SLVM_HeapInformation *heapInfo
 
 static void slvm_internal_fixStaticHeap(SLVM_HeapInformation *heapInformation)
 {
-    // Fix the symbols first.
+    /* Fix the symbols first. */
     slvm_spur_heap_iterate(heapInformation, &slvm_internal_fixStaticHeap_symbols);
     slvm_spur_heap_iterate(heapInformation, &slvm_spur_heap_applyNotNullForwarding);
 
-    // Fix the global variables.
+    /* Fix the global variables. */
     slvm_spur_heap_iterate(heapInformation, &slvm_internal_fixStaticHeap_globalVariables);
     slvm_spur_heap_iterate(heapInformation, &slvm_spur_heap_applyNotNullForwarding);
 }
@@ -571,7 +571,7 @@ static void slvm_internal_fixStaticHeap(SLVM_HeapInformation *heapInformation)
 
 static void slvm_internal_fixStaticHeapPass2(SLVM_HeapInformation *heapInformation)
 {
-    // Fix the class variables.
+    /* Fix the class variables. */
     slvm_spur_heap_iterate(heapInformation, &slvm_internal_fixStaticHeap_classVariables);
     slvm_spur_heap_iterate(heapInformation, &slvm_spur_heap_applyNotNullForwarding);
 }

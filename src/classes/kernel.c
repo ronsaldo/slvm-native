@@ -107,7 +107,20 @@ extern SLVM_Oop slvm_globals_addIfNotExistent(SLVM_Oop variable)
 
 extern SLVM_Oop slvm_globals_fixClassVariable(SLVM_Oop variable)
 {
-    /* TODO: Implement this. */
+    SLVM_Association *association;
+
+    SLVM_Association *classGlobal;
+    SLVM_Class *clazz;
+
+    association = (SLVM_Association*)variable;
+    if(slvm_getClassIndexFromOop(association->value) == SLVM_KCI_GlobalVariable)
+    {
+        classGlobal = (SLVM_Association*)association->value;
+        assert(!slvm_isNil(classGlobal->value));
+        clazz = (SLVM_Class*)classGlobal->value;
+        return (SLVM_Oop)slvm_Dictionary_associationAt((SLVM_Dictionary*)clazz->classPool, association->_base_.key,
+            (SLVM_HashFunction)slvm_String_hash, (SLVM_EqualityFunction)slvm_String_equals);
+    }
     return variable;
 }
 
@@ -159,6 +172,10 @@ extern SLVM_Oop slvm_dynrun_subclassWithSomeNames(SLVM_Oop superClassName,
     SLVM_Class *clazz;
     SLVM_Behavior *classBehavior;
     SLVM_ClassDescription *classDescription;
+    SLVM_Array *classVariables;
+    SLVM_Association *classVariable;
+    size_t numberOfClassVariables;
+    size_t i;
 
     /*printf("Register class: ");
     slvm_String_printLine((SLVM_String*)name);*/
@@ -207,6 +224,23 @@ extern SLVM_Oop slvm_dynrun_subclassWithSomeNames(SLVM_Oop superClassName,
     clazz = (SLVM_Class*)classBehavior;
     clazz->category = categoryName;
     clazz->name = name;
+    clazz->classPool = (SLVM_Oop)slvm_Dictionary_new(SLVM_KCLASS(Dictionary));
+    clazz->sharedPools = poolDictionaries;
+
+    if(!slvm_isNil(classVariableAssociations))
+    {
+        numberOfClassVariables = slvm_basicSize(classVariableAssociations);
+        printf("Number of class variables %zu\n", numberOfClassVariables);
+        classVariables = (SLVM_Array*)classVariableAssociations;
+        for(i = 0; i < numberOfClassVariables; ++i)
+        {
+            classVariable = (SLVM_Association*)classVariables->data[i];
+            printf("Set class variable[%d] value %p, old %p:%d\n", (int)slvm_getClassIndexFromOop((SLVM_Oop)classVariable), classVariable, (void*)classVariable->value, (int)slvm_getClassIndexFromOop(classVariable->value));
+            classVariable->value = slvm_nilOop;
+            slvm_Dictionary_addAssociation((SLVM_IdentityDictionary*)clazz->classPool, classVariable,
+                (SLVM_HashFunction)slvm_String_hash, (SLVM_EqualityFunction)slvm_String_equals);
+        }
+    }
 
     /* Link the metaclass with its class */
     metaClass->thisClass = clazz;

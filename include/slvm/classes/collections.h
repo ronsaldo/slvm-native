@@ -4,6 +4,9 @@
 #include "kernel.h"
 #include "magnitude.h"
 
+typedef uint32_t (*SLVM_HashFunction) (SLVM_Oop object);
+typedef uint32_t (*SLVM_EqualityFunction) (SLVM_Oop first, SLVM_Oop second);
+
 typedef SLVM_Object SLVM_Collection;
     typedef struct SLVM_HashedCollection_ SLVM_HashedCollection;
         typedef SLVM_HashedCollection SLVM_Dictionary;
@@ -148,6 +151,8 @@ void slvm_WeakSet_add(SLVM_WeakSet *set, SLVM_Oop object, SLVM_HashFunction hash
  */
 SLVM_Dictionary *slvm_Dictionary_new(SLVM_Class *clazz);
 SLVM_Dictionary *slvm_Dictionary_newWithCapacity(SLVM_Class *clazz, size_t n);
+SLVM_Association *slvm_Dictionary_associationAt(SLVM_Dictionary *dictionary, SLVM_Oop key, SLVM_HashFunction hashFunction, SLVM_EqualityFunction equalityFunction);
+void slvm_Dictionary_addAssociation(SLVM_Dictionary *dictionary, SLVM_Association *association, SLVM_HashFunction hashFunction, SLVM_EqualityFunction equalityFunction);
 
 SLVM_MethodDictionary *slvm_MethodDictionary_new();
 SLVM_MethodDictionary *slvm_MethodDictionary_newWithCapacity(size_t n);

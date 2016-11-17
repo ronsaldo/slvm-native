@@ -328,6 +328,103 @@ SLVM_Dictionary *slvm_Dictionary_newWithCapacity(SLVM_Class *clazz, size_t n)
     return result;
 }
 
+intptr_t slvm_Dictionary_scanFor(SLVM_IdentityDictionary *dictionary, SLVM_Oop key, SLVM_HashFunction hashFunction, SLVM_EqualityFunction equalityFunction)
+{
+    SLVM_Association *element;
+    size_t arraySize;
+    size_t start;
+    size_t index;
+
+    arraySize = slvm_basicSize((SLVM_Oop)dictionary->array);
+    if(arraySize == 0)
+        return -1;
+
+    start = hashFunction(key) % arraySize;
+    index = start;
+    SLVM_Array *array = dictionary->array;
+    do
+    {
+        element = (SLVM_Association*)array->data[index];
+        if(slvm_isNil(element) || equalityFunction(element->_base_.key, key))
+            return index;
+
+        index = (index + 1) % arraySize;
+    } while(index != start);
+
+    return -1;
+}
+
+void slvm_Dictionary_grow(SLVM_IdentityDictionary *dictionary, SLVM_HashFunction hashFunction, SLVM_EqualityFunction equalityFunction)
+{
+    size_t i;
+    size_t arraySize;
+    size_t newArraySize;
+    SLVM_Array *oldArray;
+    SLVM_Association *element;
+
+    /* Duplicate the dictionary capacity. */
+    arraySize = slvm_basicSize((SLVM_Oop)dictionary->array);
+    newArraySize = arraySize * 2;
+    if(newArraySize < 4)
+        newArraySize = 4;
+
+    /* Allocate the new array. */
+    oldArray = dictionary->array;
+    dictionary->tally = slvm_encodeSmallInteger(0);
+    dictionary->array = SLVM_KNEW(Array, newArraySize);
+
+    /* Reinsert the elements into the set. */
+    for(i = 0; i < arraySize; ++i)
+    {
+        element = (SLVM_Association*)oldArray->data[i];
+        if(!slvm_isNil(element))
+            slvm_Dictionary_addAssociation(dictionary, element, hashFunction, equalityFunction);
+    }
+}
+
+SLVM_Association *slvm_Dictionary_associationAt(SLVM_Dictionary *dictionary, SLVM_Oop key, SLVM_HashFunction hashFunction, SLVM_EqualityFunction equalityFunction)
+{
+    intptr_t index;
+
+    assert(!slvm_isNil(dictionary));
+
+    /* Scan the element. */
+    index  = slvm_Dictionary_scanFor(dictionary, key, hashFunction, equalityFunction);
+    assert(index >= 0);
+
+    /* Return the value of the element. */
+    return (SLVM_Association *)dictionary->array->data[index];
+}
+
+void slvm_Dictionary_addAssociation(SLVM_Dictionary *dictionary, SLVM_Association *association, SLVM_HashFunction hashFunction, SLVM_EqualityFunction equalityFunction)
+{
+    SLVM_Array *array;
+    intptr_t index;
+
+    assert(!slvm_isNil(dictionary));
+    assert(!slvm_isNil(association));
+
+    /* Scan the element */
+    index = slvm_Dictionary_scanFor(dictionary, association->_base_.key, hashFunction, equalityFunction);
+    assert(index >= 0);
+
+    /* Put the element at its position. */
+    array = dictionary->array;
+    if(!slvm_isNil(array->data[index]))
+    {
+        array->data[index] = (SLVM_Oop)association;
+    }
+    else
+    {
+        array->data[index] = (SLVM_Oop)association;
+
+        /* Increase the dictionary size. */
+        dictionary->tally += slvm_encodeSmallIntegerOffset(1);
+        if(slvm_HashedCollection_fullCondition((SLVM_HashedCollection*)dictionary))
+            slvm_Dictionary_grow(dictionary, hashFunction, equalityFunction);
+    }
+}
+
 /**
  * Identity dictionary
  */
@@ -413,7 +510,7 @@ void slvm_IdentityDictionary_addAssociation(SLVM_IdentityDictionary *dictionary,
 
     /* Put the element at its position. */
     array = dictionary->array;
-    if((SLVM_Association*)array->data[index] == association)
+    if(!slvm_isNil(array->data[index]))
     {
         array->data[index] = (SLVM_Oop)association;
     }
