@@ -153,6 +153,40 @@ void slvm_internal_init_classes(void)
 /**
  * Package registration methods.
  */
+extern void slvm_dynrun_classSetMetadata(SLVM_Oop classOop,
+        SLVM_Oop instanceVariableNames, SLVM_Oop metaInstanceVariableNames,
+        SLVM_Oop classVariableAssociations, SLVM_Oop poolDictionaries,
+        SLVM_Oop categoryName)
+{
+    SLVM_Class *clazz;
+    SLVM_ClassDescription *classDescription;
+    SLVM_Array *classVariables;
+    SLVM_Association *classVariable;
+    size_t numberOfClassVariables;
+    size_t i;
+
+    classDescription = (SLVM_ClassDescription*)classOop;
+    classDescription->instanceVariables = instanceVariableNames;
+
+    clazz = (SLVM_Class*)classOop;
+    clazz->category = categoryName;
+    clazz->classPool = (SLVM_Oop)slvm_Dictionary_new(SLVM_KCLASS(Dictionary));
+    clazz->sharedPools = poolDictionaries;
+
+    if(!slvm_isNil(classVariableAssociations))
+    {
+        numberOfClassVariables = slvm_basicSize(classVariableAssociations);
+        classVariables = (SLVM_Array*)classVariableAssociations;
+        for(i = 0; i < numberOfClassVariables; ++i)
+        {
+            classVariable = (SLVM_Association*)classVariables->data[i];
+            classVariable->value = slvm_nilOop;
+            slvm_Dictionary_addAssociation((SLVM_IdentityDictionary*)clazz->classPool, classVariable,
+                (SLVM_HashFunction)slvm_String_hash, (SLVM_EqualityFunction)slvm_String_equals);
+        }
+    }
+}
+
 extern SLVM_Oop slvm_dynrun_subclassWithSomeNames(SLVM_Oop superClassName,
         SLVM_Oop name,
         SLVM_Oop instanceVariableNames, SLVM_Oop format,
@@ -169,13 +203,8 @@ extern SLVM_Oop slvm_dynrun_subclassWithSomeNames(SLVM_Oop superClassName,
     SLVM_Behavior *metaClassBehavior;
     SLVM_ClassDescription *metaClassDescription;
 
-    SLVM_Class *clazz;
     SLVM_Behavior *classBehavior;
-    SLVM_ClassDescription *classDescription;
-    SLVM_Array *classVariables;
-    SLVM_Association *classVariable;
-    size_t numberOfClassVariables;
-    size_t i;
+    SLVM_Class *clazz;
 
     /*printf("Register class: ");
     slvm_String_printLine((SLVM_String*)name);*/
@@ -218,36 +247,20 @@ extern SLVM_Oop slvm_dynrun_subclassWithSomeNames(SLVM_Oop superClassName,
     classBehavior->format = format;
     classBehavior->methodDict = slvm_MethodDictionary_new();
 
-    classDescription = (SLVM_ClassDescription*)classBehavior;
-    classDescription->instanceVariables = instanceVariableNames;
-
-    clazz = (SLVM_Class*)classBehavior;
-    clazz->category = categoryName;
-    clazz->name = name;
-    clazz->classPool = (SLVM_Oop)slvm_Dictionary_new(SLVM_KCLASS(Dictionary));
-    clazz->sharedPools = poolDictionaries;
-
-    if(!slvm_isNil(classVariableAssociations))
-    {
-        numberOfClassVariables = slvm_basicSize(classVariableAssociations);
-        printf("Number of class variables %zu\n", numberOfClassVariables);
-        classVariables = (SLVM_Array*)classVariableAssociations;
-        for(i = 0; i < numberOfClassVariables; ++i)
-        {
-            classVariable = (SLVM_Association*)classVariables->data[i];
-            printf("Set class variable[%d] value %p, old %p:%d\n", (int)slvm_getClassIndexFromOop((SLVM_Oop)classVariable), classVariable, (void*)classVariable->value, (int)slvm_getClassIndexFromOop(classVariable->value));
-            classVariable->value = slvm_nilOop;
-            slvm_Dictionary_addAssociation((SLVM_IdentityDictionary*)clazz->classPool, classVariable,
-                (SLVM_HashFunction)slvm_String_hash, (SLVM_EqualityFunction)slvm_String_equals);
-        }
-    }
-
     /* Link the metaclass with its class */
+    clazz = (SLVM_Class*)classBehavior;
+    clazz->name = name;
     metaClass->thisClass = clazz;
 
     /* Register the class in the system dictionary. */
     slvm_globals_atPut(clazz->name, (SLVM_Oop)clazz);
-    return (SLVM_Oop)metaClass;
+
+    /* Set the class metadata */
+    slvm_dynrun_classSetMetadata((SLVM_Oop)clazz, instanceVariableNames, metaInstanceVariableNames,
+        classVariableAssociations, poolDictionaries,
+        categoryName);
+
+    return (SLVM_Oop)clazz;
 }
 
 extern SLVM_Oop slvm_dynrun_registerMethodWithNames(SLVM_Oop method, SLVM_Oop selector, SLVM_Oop className, SLVM_Oop classSide)
