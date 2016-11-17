@@ -49,6 +49,39 @@ _C(_slvm_dynrun_send_trampoline):
     call _C(slvm_dynrun_send_dispatch)
     hlt
 
+GLOBAL _C(_slvm_dynrun_supersend_trampoline)
+EXTERN _C(slvm_dynrun_supersend_dispatch)
+_C(_slvm_dynrun_supersend_trampoline):
+    push  rbp
+    mov  rbp,rsp
+
+    push  rax  ; Selector
+    push  rcx  ; Argument description
+
+    ; Store the stack pointer
+    mov  rax,rsp
+
+    ; Fetch the stack segment pointer
+    mov  rbx,rsp
+    and  rbx,-4096
+    add  rbx,4096
+
+    ; Fetch the thread data
+    mov  rcx, [rbx-48]
+
+    ; Store the smalltalk stack pointers.
+    mov  [rbx-24],rsp
+    mov  [rbx-32],rbp
+
+    ; Restore the C stack
+    mov  rsp, [rcx+0]
+    mov  rbp, [rcx+8]
+
+    ; Pass the smalltalk stack pointer
+    mov rdi, 0
+    mov rsi, rax
+    call _C(slvm_dynrun_supersend_dispatch)
+    hlt
 ; _slvm_dynrun_stack_limit_trap
 GLOBAL _C(_slvm_dynrun_stack_limit_trap)
 EXTERN _C(slvm_dynrun_new_stack_segment)

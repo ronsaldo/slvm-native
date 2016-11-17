@@ -342,6 +342,38 @@ void* slvm_dynrun_send_dispatch(int senderCallingConvention, void *stackPointer)
     return slvm_dynrun_send_activateMethod(senderCallingConvention, stackPointer, method);
 }
 
+void* slvm_dynrun_supersend_dispatch(int senderCallingConvention, void *stackPointer, SLVM_Behavior *behavior)
+{
+    SLVM_Oop method;
+    MessageSmalltalkMetadata smalltalkConverted;
+
+    MessageSendRequiredArguments *requiredArguments = (MessageSendRequiredArguments*)stackPointer;
+    MessageSmalltalkMetadata *smalltalk = &requiredArguments->smalltalk;
+
+    /* Convert the sending metadata layout to the Smalltalk convention. */
+    if(senderCallingConvention == SLVM_CC_CDecl)
+    {
+        slvm_dynrun_convertSendMetadataToSmalltalkFromC(&requiredArguments->c, &smalltalkConverted);
+        smalltalk = &smalltalkConverted;
+    }
+
+    /*puts("Super send entered");
+    printf("Send[%p] dispatch to %p: %p %d %d: ", (void*)smalltalk->selector, (void*)requiredArguments->receiver, stackPointer, smalltalk->oopArgumentCount, smalltalk->nativeArgumentSize);
+    slvm_String_printLine((SLVM_String*)smalltalk->selector);
+    if(smalltalk->oopArgumentCount)
+        printf("Arg 0: %p\n", (void*)requiredArguments->oopArguments[0]);*/
+
+    if(slvm_isNil(behavior))
+    {
+        fprintf(stderr, "Invalid super send lookup behavior.");
+        abort();
+    }
+
+    /* Look up the method. */
+    method = slvm_Behavior_lookup(behavior, smalltalk->selector);
+    return slvm_dynrun_send_activateMethod(senderCallingConvention, stackPointer, method);
+}
+
 extern SLVM_Oop slvm_primitiveReplaceContextWithCompiledMethodActivation(SLVM_PrimitiveContext *context, SLVM_CompiledMethod *method)
 {
     return (SLVM_Oop)slvm_dynrun_send_activateMethod(context->contextCallingConvention, context->stackPointer, (SLVM_Oop)method);

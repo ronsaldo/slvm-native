@@ -233,6 +233,7 @@ extern SLVM_Oop slvm_dynrun_subclassWithSomeNames(SLVM_Oop superClassName,
     metaClassBehavior = (SLVM_Behavior*)metaClass;
     slvm_objectmodel_registerBehavior(metaClassBehavior);
 
+    metaClassBehavior->superclass = (SLVM_Behavior*)superMetaclass;
     metaClassBehavior->format = metaFormat;
     metaClassBehavior->methodDict = slvm_MethodDictionary_new();
 
@@ -244,6 +245,7 @@ extern SLVM_Oop slvm_dynrun_subclassWithSomeNames(SLVM_Oop superClassName,
     assert(slvm_getClassFromOop((SLVM_Oop)classBehavior) == metaClassBehavior);
     slvm_objectmodel_registerBehavior(classBehavior);
 
+    classBehavior->superclass = (SLVM_Behavior*)superClass;
     classBehavior->format = format;
     classBehavior->methodDict = slvm_MethodDictionary_new();
 
